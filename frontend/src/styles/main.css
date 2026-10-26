@@ -1,0 +1,126 @@
+/* ============================================================
+   思维赋能 · 全局柔和主题
+   ============================================================ */
+:root {
+  --primary: #4a7dff;
+  --primary-deep: #2f5fe0;
+  --accent: #ff9a4d;
+  --ink: #2c3347;
+  --ink-2: #6b7386;
+  --ink-3: #9aa1b5;
+  --bg: #f4f6fb;
+  --card: #ffffff;
+  --line: #e9edf5;
+  --radius: 14px;
+  --shadow: 0 2px 12px rgba(76, 96, 160, 0.07);
+  --shadow-hover: 0 8px 28px rgba(76, 96, 160, 0.14);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(122, 162, 255, 0.14), transparent 60%),
+    radial-gradient(900px 420px at -10% 110%, rgba(255, 178, 120, 0.12), transparent 55%),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 通用卡片 ---------- */
+.soft-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 24px;
+  border: 1px solid rgba(233, 237, 245, 0.8);
+  transition: box-shadow .25s ease, transform .25s ease;
+}
+.soft-card.hoverable:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: .5px;
+}
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--primary), #8fb0ff);
+}
+
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); }
+
+/* 兼容旧页面类名 */
+.page-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  border: 1px solid rgba(233, 237, 245, 0.8);
+}
+.page-title {
+  font-size: 16px; font-weight: 600; color: var(--ink); margin: 0 0 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.page-title::before {
+  content: ''; width: 4px; height: 16px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--primary), #8fb0ff);
+}
+
+/* ---------- 覆盖 Element Plus 主色为柔和蓝 ---------- */
+.el-button--primary {
+  --el-button-bg-color: var(--primary) !important;
+  --el-button-border-color: var(--primary) !important;
+  --el-button-hover-bg-color: #6a94ff !important;
+  --el-button-hover-border-color: #6a94ff !important;
+  --el-button-active-bg-color: var(--primary-deep) !important;
+}
+.el-menu { border-right: none !important; }
+
+/* ---------- 页面头部：标题 + 描述，统一正式感 ---------- */
+.page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-header .ph-title { font-size: 20px; font-weight: 700; color: var(--ink); letter-spacing: .5px; margin: 0; display: flex; align-items: center; gap: 12px; }
+.page-header .ph-title::before {
+  content: ''; width: 5px; height: 20px; border-radius: 3px;
+  background: linear-gradient(180deg, var(--primary), #8fb0ff);
+}
+.page-header .ph-desc { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); }
+.page-header .ph-extra { display: flex; gap: 8px; align-items: center; }
+
+/* 卡片内嵌页头（带底部分隔线） */
+.card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; gap: 10px;
+}
+
+/* ---------- Element Plus 细节统一 ---------- */
+.el-table { --el-table-header-bg-color: #f7f9fd; --el-table-header-text-color: var(--ink-2);
+  --el-table-border-color: var(--line); border-radius: 10px; }
+.el-table th.el-table__cell { font-weight: 600; }
+.el-dialog { border-radius: 16px !important; }
+.el-dialog__header { border-bottom: 1px solid var(--line); margin-right: 0 !important; padding-bottom: 14px !important; }
+.el-pagination { --el-color-primary: var(--primary); }
+
+/* 页面进入动画（配合 <router-view v-slot> 的 transition） */
+.fade-slide-enter-active { transition: all .28s cubic-bezier(.2,.8,.3,1); }
+.fade-slide-enter-from { opacity: 0; transform: translateY(10px); }
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d4dae8; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #b9c2d8; }
+::-webkit-scrollbar-track { background: transparent; }
