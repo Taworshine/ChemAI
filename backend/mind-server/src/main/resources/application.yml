@@ -1,0 +1,44 @@
+server:
+  port: 8080
+  tomcat:
+    uri-encoding: UTF-8
+    relaxed-query-chars: '[,]'
+
+spring:
+  application:
+    name: mind-empower-server
+  datasource:
+    url: jdbc:mysql://localhost:3306/mind_empower?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: psxngS4
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: ppsxngS4
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+
+# Sa-Token 配置
+sa-token:
+  token-name: satoken
+  timeout: 86400
+  is-log: false
+
+# Python AI 服务地址
+ai:
+  service:
+    url: http://localhost:8000
+
+app:
+  upload-dir: ./uploads
