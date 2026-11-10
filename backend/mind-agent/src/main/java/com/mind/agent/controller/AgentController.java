@@ -9,6 +9,8 @@ import com.mind.agent.entity.DialogMessage;
 import com.mind.agent.entity.DialogSession;
 import com.mind.agent.mapper.DialogMessageMapper;
 import com.mind.agent.mapper.DialogSessionMapper;
+import com.mind.analysis.entity.StudentProfile;
+import com.mind.analysis.mapper.StudentProfileMapper;
 import com.mind.common.Result;
 import com.mind.common.ai.AiServiceClient;
 import org.neo4j.driver.Driver;
@@ -32,16 +34,19 @@ public class AgentController {
     private final DialogMessageMapper messageMapper;
     private final AiServiceClient aiClient;
     private final com.mind.agent.mapper.FaqMapper faqMapper;
+    private final StudentProfileMapper profileMapper;
     private final Driver driver;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public AgentController(DialogSessionMapper sessionMapper, DialogMessageMapper messageMapper,
-                           AiServiceClient aiClient, com.mind.agent.mapper.FaqMapper faqMapper, Driver driver) {
+                           AiServiceClient aiClient, com.mind.agent.mapper.FaqMapper faqMapper,
+                           StudentProfileMapper profileMapper, Driver driver) {
         this.sessionMapper = sessionMapper;
         this.messageMapper = messageMapper;
         this.aiClient = aiClient;
         this.faqMapper = faqMapper;
+        this.profileMapper = profileMapper;
         this.driver = driver;
     }
 
@@ -164,6 +169,29 @@ public class AgentController {
                     nextStep = resp.get("next_step") == null ? 0 : Integer.parseInt(String.valueOf(resp.get("next_step")));
                 }
 
+                // 5. E 状态（学生已理解）：AI 总结本轮对话，提炼 footprint/comment 写入学情画像
+                if (hitFaq == null && "E".equals(extractState(reply)) && session.getStudentId() != null) {
+                    try {
+                        List<Map<String, Object>> fullHistory = new ArrayList<>(history);
+                        Map<String, Object> cur = new HashMap<>();
+                        cur.put("role", "user");
+                        cur.put("content", message);
+                        fullHistory.add(cur);
+                        Map<String, Object> sum = aiClient.summarize(fullHistory, context);
+                        String footprint = sum.get("footprint") == null ? null : String.valueOf(sum.get("footprint"));
+                        String comment = sum.get("comment") == null ? null : String.valueOf(sum.get("comment"));
+                        if (footprint != null && !footprint.isBlank()) {
+                            StudentProfile sp = new StudentProfile();
+                            sp.setStudentId(session.getStudentId());
+                            sp.setFootprint(footprint);
+                            sp.setComment(comment);
+                            profileMapper.insert(sp);
+                        }
+                    } catch (Exception ignored) {
+                        // 总结入库失败不影响对话主流程
+                    }
+                }
+
                 emitter.send(SseEmitter.event().name("meta").data(
                         "{\"misconceptionType\":\"" + (misconceptionType == null ? "" : misconceptionType)
                                 + "\",\"nextStep\":" + nextStep + "}"));
@@ -193,6 +221,18 @@ public class AgentController {
             }
         });
         return emitter;
+    }
+
+    /** 从 AI 回复首行提取状态字母（A/B/C/D/E），用于测试与 E 状态入库判断 */
+    private String extractState(String reply) {
+        if (reply == null) return null;
+        for (String line : reply.split("\\R")) {
+            String t = line.trim();
+            if (t.length() == 1 && Character.isLetter(t.charAt(0))) {
+                return t.toUpperCase();
+            }
+        }
+        return null;
     }
 
     /** 与已发布的高频问题做 2-gram 相似度匹配，≥0.35 即命中标准解答 */

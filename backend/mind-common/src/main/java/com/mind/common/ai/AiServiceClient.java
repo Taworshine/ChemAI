@@ -136,6 +136,18 @@ public class AiServiceClient {
         return postForMap("/api/faq/cluster", req);
     }
 
+    /**
+     * 学生进入 E 状态（已理解）后，总结本轮对话生成 footprint（知识点短语）和 comment（学习笔记）。
+     * 返回 {"footprint": "...", "comment": "..."}。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> summarize(List<Map<String, Object>> history, Map<String, Object> context) {
+        Map<String, Object> req = new HashMap<>();
+        req.put("history", history);
+        req.put("context", context == null ? new HashMap<>() : context);
+        return postForMap("/api/chat/summarize", req);
+    }
+
     public boolean health() {
         try {
             String body = restTemplate.getForObject(baseUrl + "/api/health", String.class);

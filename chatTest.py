@@ -2,8 +2,8 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# 加载 .env 文件中的 API Key
-load_dotenv()
+# 加载 ai-service/.env 中的 API Key（与 llm.py 共用同一份配置）
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-service", ".env"))
 
 client = OpenAI(
     api_key=os.environ.get("DEEPSEEK_API_KEY"),

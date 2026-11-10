@@ -32,3 +32,7 @@ Thumbs.db
 *.tmp
 *.bak
 *_tmp.bat
+
+# ===== npm缓存 =====
+frontend/.npm-cache-new/
+frontend/.npm-temp-cache/

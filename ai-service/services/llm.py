@@ -57,11 +57,23 @@ def _client():
         return OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=150)
 
 
-def chat_completion(prompt: str, max_tokens: int = 2000) -> str:
+def _build_messages(prompt: str, history: list = None) -> list:
+    """构造 OpenAI messages：system + 历史对话 + 当前 user prompt。
+    历史只取最近 20 条（约 10 轮），避免上下文过长撑爆 token。"""
+    messages = [{"role": "system", "content": "你是苏格拉底式教学助手，只输出要求内容。"}]
+    if history:
+        messages.extend(history[-20:])
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+def chat_completion(prompt: str, history: list = None, max_tokens: int = 2000) -> str:
     """调用 LLM 生成文本；429 限流时退避重试，其余失败返回 None 交给引导引擎。
+    history: 历史对话列表 [{"role": "user"|"assistant", "content": "..."}]，会注入 messages。
     max_tokens 需给 reasoning 模型留出思考空间，否则会 empty content。"""
     if not USE_LLM:
         return None
+    messages = _build_messages(prompt, history)
     last_err = None
     for attempt, wait in ((0, 0), (1, 6), (2, 15)):  # 免费档 RPM 很低，限流时等待重试
         if wait:
@@ -69,8 +81,7 @@ def chat_completion(prompt: str, max_tokens: int = 2000) -> str:
         try:
             resp = _client().chat.completions.create(
                 model=MODEL,
-                messages=[{"role": "system", "content": "你是苏格拉底式教学助手，只输出要求内容。"},
-                          {"role": "user", "content": prompt}],
+                messages=messages,
                 max_tokens=max_tokens,
             )
             content = (resp.choices[0].message.content or "").strip()
@@ -93,11 +104,13 @@ def _log_fail(last_err) -> None:
     print(f"[llm] 调用失败，降级规则引擎: {last_err}")
 
 
-def chat_completion_stream(prompt: str, max_tokens: int = 2000, limit: int = 90):
+def chat_completion_stream(prompt: str, history: list = None, max_tokens: int = 2000, limit: int = 300):
     """流式调用 LLM，逐段 yield 文本增量（已按 limit 截断，保证用户所见即最终入库内容）。
+    history: 历史对话列表，会注入 messages。
     首次 yield 前完成限流重试；全部失败时静默返回（调用方走规则兜底）。"""
     if not USE_LLM:
         return
+    messages = _build_messages(prompt, history)
     last_err = None
     for attempt, wait in ((0, 0), (1, 6), (2, 15)):
         if wait:
@@ -105,8 +118,7 @@ def chat_completion_stream(prompt: str, max_tokens: int = 2000, limit: int = 90)
         try:
             stream = _client().chat.completions.create(
                 model=MODEL,
-                messages=[{"role": "system", "content": "你是苏格拉底式教学助手，只输出要求内容。"},
-                          {"role": "user", "content": prompt}],
+                messages=messages,
                 max_tokens=max_tokens,
                 stream=True,
             )
@@ -134,36 +146,105 @@ def chat_completion_stream(prompt: str, max_tokens: int = 2000, limit: int = 90)
 
 def _socratic_prompt(message: str, context: dict) -> str:
     path_lines = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(context.get("path") or []))
+    consecutive_stuck_count = context.get("consecutive_stuck_count", 0)
+    total_stuck_count = context.get("total_stuck_count", 0)
+    consecutive_answer_requests = context.get("consecutive_answer_requests", 0)
     return f"""你是苏格拉底式教学助手。基于思维路径：
 {path_lines or '（无）'}
 当前进行到第 {context.get('current_step', 0) + 1} 步。
 学生回答：{message}
 历史卡点：{context.get('misconception') or '（无）'}
+当前连续停滞次数：{consecutive_stuck_count}
+本轮累计未推进次数：{total_stuck_count}
+连续索要答案次数：{consecutive_answer_requests}
 
-要求：
-1. 禁止直接给出答案或完整解题步骤
-2. 通过提问引导学生思考，顺着当前这一步追问
-3. 学生连续2次无法推进时，给该步的提示（非答案）
-4. 每次回复不超过80字，语言亲切鼓励
-5. 使用中文，符合高中生认知水平
+【第一步：判断学生状态】
+A. 推进——学生在尝试回答、提出自己的思路，哪怕不完整或有错误
+B. 索要答案——学生明确要求直接给答案、给步骤，或说“不会，你告诉我”
+C. 停滞——学生表示不知道、给出“嗯/不知道/随便”类回应，或重复上一轮的困惑
+D. 偏离——学生聊与当前题目无关的内容
+E. 已理解——学生正确回答了导师上一轮提出的具体问题，或准确复述了当前这一步的推理逻辑，明确表示“懂了/明白了/会了”，且回答内容与当前步骤相符
 
-只输出追问内容本身。"""
+判断 E 的关键：学生这一轮的回答必须实质命中导师上一轮问的那个点（给出正确的关系、正确的判断或正确的复述），而不是只说“懂了”却答不上来。
+- 只要学生给出的判断在学科上正确、且答到了导师问的那个点，就判 E；不要因为句子短、没把细节说全而降级为 A 或 C。
+- 只说“懂了/明白了”但没有任何实质内容 → 不算 E，仍按 C（停滞）处理，请学生说具体一点。
+- 答非所问、答错、含糊带过 → 不算 E。
+
+【判断学生答案对错时的学科核对】
+- 化合价升高 = 失电子 = 被氧化，该元素所在的物质作还原剂（还原剂被氧化）。
+- 化合价降低 = 得电子 = 被还原，该元素所在的物质作氧化剂（氧化剂被还原）。
+学生表述只要符合上述定义即为正确，不要因为“剂”字读起来别扭就判错。
+
+【E 判定示例】
+- 导师上一轮问：“化合价升高的元素被氧化还是被还原？它所在的物质是氧化剂还是还原剂？”
+  学生答：“被氧化，所以它所在的物质是还原剂。” → 判 E（正确命中）。
+- 学生答：“被还原，所以是氧化剂。” → 不判 E（答错，按 C 处理，指出方向反了）。
+- 学生答：“我懂了。” → 不判 E（无实质内容，按 C 处理）。
+- 导师上一轮问：“反应物里哪种元素的化合价会变？”
+  学生答：“锰从正七价变成正二价，氯从负一价变成零价。” → 判 E（标注正确且完整）。
+
+【第二步：E 状态优先处理】
+若判定为 E，直接输出收尾回复，并跳过第三、第四步：
+- 明确肯定学生已经掌握（如“对，就是这个思路，你已经掌握了”）。
+- 用一两句话总结本步/本题的关键点，帮学生固化。
+- 不再提出任何新问题，不再追问，回复中不得出现问号。
+- 收尾语可选一句：可以进入下一题，或自己再做一道同类题巩固。
+- 若这轮是兜底交付后的验证，学生验证成功同样按 E 收尾，并视为该知识点已掌握。
+
+【第三步：判断是否进入兜底交付】
+如果本轮累计未推进次数 ≥3 ，或连续索要答案次数 ≥ 2 且引导无效，进入兜底交付模式，跳过第四步，直接执行：
+- 完整、清晰地给出正确答案和关键步骤（这是唯一允许给答案的情形）。
+- 答案后立刻要求学生完成一步验证：用自己的话复述最关键的一步，或做一道同类型最小变式。
+- 学生验证成功后，按 E 状态收尾，标记该知识点掌握、触发勋章。
+
+【第四步：非 E 且未进入兜底时，按状态选择回应策略】
+- A（推进）：肯定合理部分，顺着学生思路追问下一步。不因答案不完整就改问更基础的问题。
+- B（索要答案）：绝不直接给答案，但必须降低追问的抽象层级——拆成更小的一步，或给一个指向性提示（如“先看反应物里哪种元素化合价会变”）。禁止用“你觉得呢”“再想想”这类空泛追问回应索要答案。
+- C（停滞）：若连续停滞次数 ≥ 1（本次为连续第 2 次及以上），必须给出该步提示（非答案），不得再追问；若首次停滞，换一种更具体、更小的问法，不重复上一轮句式。
+- D（偏离）：一句话温和拉回当前步骤，然后继续。
+
+【输出格式（强制）】
+1. 纯文本输出，禁止使用任何 Markdown 语法：不得出现 **、*、#、`、>、- 开头的列表符、|表格| 等。
+2. 需要分点时，用“1.”“2.”“3.”或“第一、第二”这类纯文本序号，每条单独一行。
+3. 需要强调时，用中文引号“”或直接靠语序强调，不要用加粗、斜体或反引号。
+4. 不要输出分隔线、代码块、表情符号。
+
+【硬性约束】
+1. 除兜底交付模式外，任何情况下禁止直接给出答案或完整解题步骤。
+2. 非兜底模式下每次回复尽量不超过 80 字，如果已经超过，你也要保证逻辑完整。
+3. 语言亲切鼓励，符合高中生认知水平。
+4. 使用中文。
+5. 必须输出状态分类（以供测试）：回复的第一行只输出一个状态字母（只能是 A/B/C/D/E 之一），空一行后再输出正文，不要解释判断依据。
+6. 状态为 E 时，回复中禁止出现任何问号，禁止再接新的追问或新的思考题，必须是收尾语气。
+
+现在生成回复："""
 
 
 def socratic_reply_stream(message: str, history: list, context: dict):
     """流式版 socratic_reply。
     先逐段 yield ("delta", 文本增量)；最后 yield ("result", 完整结果 dict)。
     LLM 不可用/失败时，result 为规则引擎兜底（一次性给出，不再分段）。"""
+    # 计算停滞/索要答案计数器并注入 context（Java 端不传，自行统计）
+    counters = _compute_stuck_counters(history)
+    ctx = dict(context)
+    ctx.update(counters)
+
+    # 连续索要答案 ≥2 次 或 累计未推进 ≥3 次 → 进入兜底交付模式
+    # 本轮若学生已在推进（可能已理解，对应状态 E），不强制兜底给答案，交给 prompt 判断
+    need_fallback = (counters["consecutive_answer_requests"] >= 2 or counters["total_stuck_count"] >= 3) \
+        and _classify(message, history) != "progress"
+    prompt = _fallback_answer_prompt(message, ctx) if need_fallback else _socratic_prompt(message, ctx)
+
     full = []
-    for delta in chat_completion_stream(_socratic_prompt(message, context)):
+    for delta in chat_completion_stream(prompt, history):
         full.append(delta)
         yield "delta", delta
     content = "".join(full).strip()
     if content:
-        yield "result", {"reply": content, "misconception_type": context.get("misconception"),
+        yield "result", {"reply": content, "misconception_type": ctx.get("misconception"),
                          "next_step": 0, "engine": PROVIDER}
         return
-    r = rule_reply(message, history, context)
+    r = rule_reply(message, history, ctx)
     r["engine"] = "rule-based (LLM 调用失败或 Key 无效，已降级)"
     yield "result", r
 
@@ -215,6 +296,61 @@ def _classify(message: str, history: list) -> str:
     if any(k in text for k in PROGRESS) or any(c.isdigit() for c in text) or len(text) >= 15:
         return "progress"
     return "neutral"
+
+
+def _compute_stuck_counters(history: list) -> dict:
+    """从对话历史统计连续停滞/索要答案次数，用于判断是否进入兜底交付。
+    Java 端不传这些字段，所以在 ai-service 侧自行计算。"""
+    user_msgs = [h.get("content", "") for h in history if h.get("role") == "user"]
+    if not user_msgs:
+        return {"consecutive_stuck_count": 0, "consecutive_answer_requests": 0, "total_stuck_count": 0}
+
+    # 从最近一条往前数连续停滞
+    consecutive_stuck = 0
+    for i in range(len(user_msgs) - 1, -1, -1):
+        if _classify(user_msgs[i], []) == "stuck":
+            consecutive_stuck += 1
+        else:
+            break
+
+    # 从最近一条往前数连续索要答案
+    consecutive_answer = 0
+    for i in range(len(user_msgs) - 1, -1, -1):
+        if _classify(user_msgs[i], []) == "giveup":
+            consecutive_answer += 1
+        else:
+            break
+
+    # 累计未推进次数（停滞 + 索要 + 中性）
+    total_not_progress = sum(1 for m in user_msgs if _classify(m, []) in ("stuck", "giveup", "neutral"))
+
+    return {
+        "consecutive_stuck_count": consecutive_stuck,
+        "consecutive_answer_requests": consecutive_answer,
+        "total_stuck_count": total_not_progress,
+    }
+
+
+def _fallback_answer_prompt(message: str, context: dict) -> str:
+    """兜底交付模式 prompt：学生多次无法推进，强制给出答案和关键步骤。"""
+    path_lines = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(context.get("path") or []))
+    hints = context.get("hints") or []
+    current_step = context.get("current_step", 0)
+    current_hint = hints[current_step] if current_step < len(hints) else ""
+    return f"""你是苏格拉底式教学助手。学生已经多次无法推进，现在进入【兜底交付模式】。
+
+思维路径：
+{path_lines or '（无）'}
+当前步骤：第 {current_step + 1} 步
+该步提示：{current_hint or '（无）'}
+学生最后说：{message}
+
+请执行以下操作：
+1. 完整、清晰地给出这道题的正确答案和关键步骤（这是唯一允许给答案的情形）。
+2. 答案后立刻要求学生完成一步验证：用自己的话复述最关键的一步，或做一道同类型最小变式。
+3. 语气亲切，不要让学生觉得被放弃。
+
+直接输出回复内容，不要解释。"""
 
 
 def _ask_step(step: str, hint: str = None, stuck: bool = False, avoid: set = None) -> str:
@@ -271,6 +407,16 @@ def rule_reply(message: str, history: list, context: dict) -> dict:
     # 无思维路径上下文时：按关键词做学科级启发
     if not path:
         return _subject_fallback(message, history)
+
+    # 兜底交付：连续索要答案 ≥2 次 或 累计未推进 ≥3 次 → 直接给答案 + 要求验证
+    counters = _compute_stuck_counters(history)
+    if counters["consecutive_answer_requests"] >= 2 or counters["total_stuck_count"] >= 3:
+        step_idx = min(current_step, len(path) - 1)
+        step = path[step_idx]
+        hint = hints[step_idx] if step_idx < len(hints) else None
+        answer = hint if hint else f"这道题的核心是「{step}」，按题目条件逐步推导即可得到结果。"
+        return {"reply": f"好的，我直接告诉你：{answer}\n\n现在请你用自己的话复述一下这个思路，确认你理解了。",
+                "misconception_type": misconception, "next_step": step_idx}
 
     user_turns = [h for h in history if h.get("role") == "user"]
     state = _classify(message, history)
@@ -349,13 +495,62 @@ def _subject_fallback(message: str, history: list) -> dict:
 
 def socratic_reply(message: str, history: list, context: dict) -> dict:
     """优先 LLM，失败/无 Key 时降级引导引擎。（非流式版，保留给内部调用）"""
-    content = chat_completion(_socratic_prompt(message, context))
+    # 计算停滞/索要答案计数器并注入 context
+    counters = _compute_stuck_counters(history)
+    ctx = dict(context)
+    ctx.update(counters)
+
+    # 连续索要答案 ≥2 次 或 累计未推进 ≥3 次 → 兜底交付
+    # 本轮若学生已在推进（可能已理解，对应状态 E），不强制兜底给答案，交给 prompt 判断
+    need_fallback = (counters["consecutive_answer_requests"] >= 2 or counters["total_stuck_count"] >= 3) \
+        and _classify(message, history) != "progress"
+    prompt = _fallback_answer_prompt(message, ctx) if need_fallback else _socratic_prompt(message, ctx)
+
+    content = chat_completion(prompt, history)
     if content:
-        return {"reply": content[:90], "misconception_type": context.get("misconception"), "next_step": 0,
+        return {"reply": content[:300], "misconception_type": ctx.get("misconception"), "next_step": 0,
                 "engine": PROVIDER}
-    r = rule_reply(message, history, context)
+    r = rule_reply(message, history, ctx)
     r["engine"] = f"rule-based (LLM 调用失败或 Key 无效，已降级)"
     return r
+
+
+def summarize_knowledge(history: list, context: dict) -> dict:
+    """学生进入 E 状态（已理解）后，由 AI 总结本轮对话：
+    返回 {"footprint": 简短知识点短语, "comment": 简练笔记}。
+    LLM 不可用时降级为从思维路径取当前步骤。"""
+    path = context.get("path") or []
+    current_step = context.get("current_step", 0)
+
+    # 取最近若干轮拼成对话文本，供 LLM 提炼
+    dialog_lines = []
+    for h in history[-8:]:
+        role = "学生" if h.get("role") == "user" else "导师"
+        dialog_lines.append(f"{role}：{h.get('content', '')}")
+    dialog_text = "\n".join(dialog_lines)
+
+    prompt = f"""下面是一段师生苏格拉底式对话，学生已理解当前知识点。请提炼两项内容：
+1. footprint：用一个词或简短中文短语（不超过 12 个字）概括本轮的知识点，如"金属与强酸反应"。
+2. comment：用一两句话（不超过 100 字）写一段学习笔记，点明关键规则或易错点。
+
+只输出 JSON，格式：{{"footprint": "...", "comment": "..."}}，不要输出任何其他内容。
+
+对话：
+{dialog_text}"""
+    content = chat_completion(prompt, max_tokens=400)
+    if content:
+        try:
+            m = re.search(r"\{.*\}", content, re.S)
+            data = json.loads(m.group(0))
+            footprint = str(data.get("footprint", "")).strip()
+            comment = str(data.get("comment", "")).strip()
+            if footprint and comment:
+                return {"footprint": footprint[:255], "comment": comment[:1000]}
+        except Exception:
+            pass
+    # 降级：用思维路径当前步骤
+    step = path[current_step] if current_step < len(path) else "本轮知识点"
+    return {"footprint": step[:255], "comment": f"学生已掌握：{step}"}
 
 
 def extract_knowledge(text: str, doc_type: str = "A") -> dict:

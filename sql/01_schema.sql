@@ -49,12 +49,3 @@ CREATE TABLE IF NOT EXISTS dialog_message (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_session (session_id)
 );
-
--- 学情画像表
-CREATE TABLE IF NOT EXISTS student_profile (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    student_id BIGINT UNIQUE,
-    concept_mastery JSON COMMENT '{"氧化还原":0.85,"离子反应":0.72}',
-    thinking_radar JSON COMMENT '{"概念理解":80,"逻辑推理":75,"计算准确":90,"迁移应用":65,"反思修正":70}',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
