@@ -34,6 +34,11 @@ class SummarizeRequest(BaseModel):
     context: Optional[ChatContext] = None
 
 
+class TitleRequest(BaseModel):
+    history: List[ChatMessage] = []
+    message: str
+
+
 @router.post("/api/chat")
 def chat(req: ChatRequest):
     history = [m.model_dump() for m in req.history]
@@ -46,11 +51,19 @@ def chat(req: ChatRequest):
 
 @router.post("/api/chat/summarize")
 def summarize(req: SummarizeRequest):
-    """学生进入 E 状态后，总结本轮对话生成 footprint（知识点短语）和 comment（学习笔记）。"""
+    """学生进入 E 状态后，总结本轮对话生成 footprint（知识点短语）、comment（学习笔记）和 subject（学科）。"""
     history = [m.model_dump() for m in req.history]
     context = req.context.model_dump() if req.context else {}
     result = llm.summarize_knowledge(history, context)
-    return {"ok": True, "footprint": result["footprint"], "comment": result["comment"]}
+    return {"ok": True, "footprint": result["footprint"], "comment": result["comment"], "subject": result.get("subject", "其他")}
+
+
+@router.post("/api/chat/title")
+def title(req: TitleRequest):
+    """首轮对话结束后，生成不超过 30 字的会话标题。"""
+    history = [m.model_dump() for m in req.history]
+    result = llm.summarize_title(history, req.message)
+    return {"ok": True, "title": result}
 
 
 @router.post("/api/chat/stream")

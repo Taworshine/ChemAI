@@ -148,6 +148,18 @@ public class AiServiceClient {
         return postForMap("/api/chat/summarize", req);
     }
 
+    /**
+     * 首轮对话结束后，生成不超过 30 字的会话标题。
+     * 返回 {"title": "..."}。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> summarizeTitle(List<Map<String, Object>> history, String message) {
+        Map<String, Object> req = new HashMap<>();
+        req.put("history", history);
+        req.put("message", message);
+        return postForMap("/api/chat/title", req);
+    }
+
     public boolean health() {
         try {
             String body = restTemplate.getForObject(baseUrl + "/api/health", String.class);

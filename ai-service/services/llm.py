@@ -517,7 +517,7 @@ def socratic_reply(message: str, history: list, context: dict) -> dict:
 
 def summarize_knowledge(history: list, context: dict) -> dict:
     """学生进入 E 状态（已理解）后，由 AI 总结本轮对话：
-    返回 {"footprint": 简短知识点短语, "comment": 简练笔记}。
+    返回 {"footprint": 简短知识点短语, "comment": 简练笔记, "subject": 学科}。
     LLM 不可用时降级为从思维路径取当前步骤。"""
     path = context.get("path") or []
     current_step = context.get("current_step", 0)
@@ -529,11 +529,12 @@ def summarize_knowledge(history: list, context: dict) -> dict:
         dialog_lines.append(f"{role}：{h.get('content', '')}")
     dialog_text = "\n".join(dialog_lines)
 
-    prompt = f"""下面是一段师生苏格拉底式对话，学生已理解当前知识点。请提炼两项内容：
+    prompt = f"""下面是一段师生苏格拉底式对话，学生已理解当前知识点。请提炼三项内容：
 1. footprint：用一个词或简短中文短语（不超过 12 个字）概括本轮的知识点，如"金属与强酸反应"。
 2. comment：用一两句话（不超过 100 字）写一段学习笔记，点明关键规则或易错点。
+3. subject：判断本轮对话所属学科，只能从以下选项中选一个：语文、数学、英语、物理、化学、生物、历史、地理、其他。
 
-只输出 JSON，格式：{{"footprint": "...", "comment": "..."}}，不要输出任何其他内容。
+只输出 JSON，格式：{{"footprint": "...", "comment": "...", "subject": "..."}}，不要输出任何其他内容。
 
 对话：
 {dialog_text}"""
@@ -544,13 +545,45 @@ def summarize_knowledge(history: list, context: dict) -> dict:
             data = json.loads(m.group(0))
             footprint = str(data.get("footprint", "")).strip()
             comment = str(data.get("comment", "")).strip()
+            subject = str(data.get("subject", "")).strip()
             if footprint and comment:
-                return {"footprint": footprint[:255], "comment": comment[:1000]}
+                return {"footprint": footprint[:255], "comment": comment[:1000], "subject": subject[:20]}
         except Exception:
             pass
     # 降级：用思维路径当前步骤
     step = path[current_step] if current_step < len(path) else "本轮知识点"
-    return {"footprint": step[:255], "comment": f"学生已掌握：{step}"}
+    return {"footprint": step[:255], "comment": f"学生已掌握：{step}", "subject": "其他"}
+
+
+def summarize_title(history: list, message: str) -> str:
+    """首轮对话结束后，由 AI 用不超过 30 个字概括本对话主题，作为会话标题。
+    history: 历史对话（不含当前这条用户消息），message: 当前用户消息。
+    LLM 不可用时降级为取用户首条消息截断。"""
+    # 拼出已发生的对话文本（历史 + 当前用户消息）
+    dialog_lines = []
+    for h in history[-8:]:
+        role = "学生" if h.get("role") == "user" else "导师"
+        dialog_lines.append(f"{role}：{h.get('content', '')}")
+    dialog_lines.append(f"学生：{message}")
+    dialog_text = "\n".join(dialog_lines)
+
+    prompt = f"""下面是一段师生对话的开头，请用一句不超过 30 个字的中文短语概括这段对话的主题，作为会话标题。
+要求：只输出标题本身，不要加引号、序号或任何解释性文字。
+
+对话：
+{dialog_text}"""
+    content = chat_completion(prompt, max_tokens=120)
+    if content:
+        title = content.strip()
+        # 去掉可能的首尾引号、markdown 标记
+        title = title.strip('"\'`“”‘’').strip()
+        # 只取第一行
+        title = title.splitlines()[0].strip() if title else title
+        if title:
+            return title[:30]
+    # 降级：取用户首条消息截断
+    fallback = message.strip().splitlines()[0].strip() if message else "新对话"
+    return fallback[:30]
 
 
 def extract_knowledge(text: str, doc_type: str = "A") -> dict:

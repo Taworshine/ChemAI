@@ -19,6 +19,9 @@ public class StudentProfile {
     /** 学生用户 ID（sys_user.id） */
     private Long studentId;
 
+    /** 学科：语文/数学/英语/物理/化学/生物/历史/地理/其他 */
+    private String subject;
+
     /** 简短概括的知识点，如：金属单质与强酸反应 */
     private String footprint;
 
@@ -41,6 +44,14 @@ public class StudentProfile {
 
     public void setStudentId(Long studentId) {
         this.studentId = studentId;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
     }
 
     public String getFootprint() {

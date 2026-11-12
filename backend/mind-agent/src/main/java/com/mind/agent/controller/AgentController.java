@@ -180,9 +180,11 @@ public class AgentController {
                         Map<String, Object> sum = aiClient.summarize(fullHistory, context);
                         String footprint = sum.get("footprint") == null ? null : String.valueOf(sum.get("footprint"));
                         String comment = sum.get("comment") == null ? null : String.valueOf(sum.get("comment"));
+                        String subject = sum.get("subject") == null ? null : String.valueOf(sum.get("subject"));
                         if (footprint != null && !footprint.isBlank()) {
                             StudentProfile sp = new StudentProfile();
                             sp.setStudentId(session.getStudentId());
+                            sp.setSubject(subject);
                             sp.setFootprint(footprint);
                             sp.setComment(comment);
                             profileMapper.insert(sp);
@@ -192,12 +194,27 @@ public class AgentController {
                     }
                 }
 
+                // 5.5 首轮对话（summary 为空）：由 AI 生成不超过 30 字的会话标题并入库，仅执行一次
+                if (session.getSummary() == null || session.getSummary().isBlank()) {
+                    try {
+                        List<Map<String, Object>> titleHistory = new ArrayList<>(history);
+                        Map<String, Object> sum = aiClient.summarizeTitle(titleHistory, message);
+                        String title = sum.get("title") == null ? null : String.valueOf(sum.get("title"));
+                        if (title != null && !title.isBlank()) {
+                            sessionMapper.update(null, new UpdateWrapper<DialogSession>()
+                                    .eq("id", sessionId).set("summary", title));
+                        }
+                    } catch (Exception ignored) {
+                        // 标题生成失败不影响对话主流程
+                    }
+                }
+
                 emitter.send(SseEmitter.event().name("meta").data(
                         "{\"misconceptionType\":\"" + (misconceptionType == null ? "" : misconceptionType)
                                 + "\",\"nextStep\":" + nextStep + "}"));
                 emitter.send(SseEmitter.event().name("done").data("[DONE]"));
 
-                // 5. 落库 AI 消息 + 更新画像/会话总结
+                // 6. 落库 AI 消息
                 DialogMessage aiMsg = new DialogMessage();
                 aiMsg.setSessionId(sessionId);
                 aiMsg.setRole("AI");
@@ -206,11 +223,6 @@ public class AgentController {
                 aiMsg.setThinkingStep(nextStep);
                 messageMapper.insert(aiMsg);
 
-                if (misconceptionType != null) {
-                    // 记录卡点到会话总结，供教师端学情分析
-                    sessionMapper.update(null, new UpdateWrapper<DialogSession>()
-                            .eq("id", sessionId).set("summary", "检测到卡点：" + misconceptionType));
-                }
                 emitter.complete();
             } catch (Exception e) {
                 try {

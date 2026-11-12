@@ -10,7 +10,7 @@
         <div v-for="s in sessions" :key="s.id" class="session" :class="{ on: s.id === currentSessionId }"
              @click="openSession(s.id)">
           <div class="s-title">{{ s.summary || '自由提问' }}</div>
-          <div class="s-sum">会话 #{{ s.id }} · {{ fmtTime(s.createTime) }}</div>
+          <div class="s-sum">{{ fmtTime(s.createTime) }}</div>
         </div>
         <el-empty v-if="!sessions.length" description="点击右上角开始新对话" :image-size="70" />
       </div>
@@ -117,6 +117,9 @@ async function send() {
   if (!currentSessionId.value) await newSession()
   const text = input.value
   input.value = ''
+  // 乐观渲染：立即把用户提问插入消息列表，等待 AI 回复时用户能看到自己的话
+  messages.value.push({ id: Date.now(), role: 'USER', content: text })
+  scrollBottom()
   sending.value = true
   streaming.value = ''
   thinking.value = true
@@ -196,7 +199,7 @@ onMounted(async () => {
 }
 .st-chip:hover { background: rgba(74,125,255,.1); color: var(--primary); border-color: rgba(74,125,255,.3); }
 .row { display: flex; gap: 10px; align-items: flex-start; }
-.row.me { flex-direction: row-reverse; }
+.row.me { justify-content: flex-end; }
 .av {
   width: 34px; height: 34px; border-radius: 50%; color: #fff; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600;

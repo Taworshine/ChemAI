@@ -1,7 +1,7 @@
 <template>
   <div class="profile">
     <div class="soft-card">
-      <h3 class="section-title">五维能力雷达</h3>
+      <h3 class="section-title">学科能力雷达</h3>
       <div ref="radarRef" class="chart"></div>
     </div>
 
