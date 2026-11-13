@@ -84,6 +84,34 @@ public class AgentController {
         return Result.ok();
     }
 
+    /** 重命名会话：修改 dialog_session.summary */
+    @PutMapping("/session/{id}/summary")
+    public Result<Void> renameSession(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
+        DialogSession session = sessionMapper.selectById(id);
+        if (session == null || !Objects.equals(session.getStudentId(), StpUtil.getLoginIdAsLong())) {
+            return Result.error("会话不存在");
+        }
+        String summary = body.get("summary");
+        if (summary != null) {
+            summary = summary.trim();
+            if (summary.length() > 100) summary = summary.substring(0, 100);
+        }
+        sessionMapper.update(null, new UpdateWrapper<DialogSession>().eq("id", id).set("summary", summary));
+        return Result.ok();
+    }
+
+    /** 删除会话：删除 dialog_session 记录及 dialog_message 中该会话的全部消息 */
+    @DeleteMapping("/session/{id}")
+    public Result<Void> deleteSession(@PathVariable("id") Long id) {
+        DialogSession session = sessionMapper.selectById(id);
+        if (session == null || !Objects.equals(session.getStudentId(), StpUtil.getLoginIdAsLong())) {
+            return Result.error("会话不存在");
+        }
+        messageMapper.delete(new QueryWrapper<DialogMessage>().eq("session_id", id));
+        sessionMapper.deleteById(id);
+        return Result.ok();
+    }
+
     /**
      * 发送消息，SSE 流式返回 AI 追问。
      * 流程：保存学生消息 → 组装思维路径上下文 → 调用 Python AI 服务 → 流式推送 → 落库

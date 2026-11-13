@@ -104,8 +104,10 @@ def _log_fail(last_err) -> None:
     print(f"[llm] 调用失败，降级规则引擎: {last_err}")
 
 
-def chat_completion_stream(prompt: str, history: list = None, max_tokens: int = 2000, limit: int = 300):
-    """流式调用 LLM，逐段 yield 文本增量（已按 limit 截断，保证用户所见即最终入库内容）。
+def chat_completion_stream(prompt: str, history: list = None, max_tokens: int = 2000):
+    """流式调用 LLM，逐段 yield 文本增量。
+    不再对回复字符数做硬截断（由 prompt 中的软上限引导控制篇幅）；
+    max_tokens 作为 API 层面的安全上限，防止极端长回复。
     history: 历史对话列表，会注入 messages。
     首次 yield 前完成限流重试；全部失败时静默返回（调用方走规则兜底）。"""
     if not USE_LLM:
@@ -122,18 +124,12 @@ def chat_completion_stream(prompt: str, history: list = None, max_tokens: int = 
                 max_tokens=max_tokens,
                 stream=True,
             )
-            total = 0
             for evt in stream:
                 if not evt.choices:
                     continue
                 delta = evt.choices[0].delta.content or ""
                 if not delta:
                     continue
-                if total >= limit:
-                    return
-                if total + len(delta) > limit:
-                    delta = delta[:limit - total]
-                total += len(delta)
                 yield delta
             return
         except Exception as e:
@@ -225,7 +221,9 @@ def socratic_reply_stream(message: str, history: list, context: dict):
     先逐段 yield ("delta", 文本增量)；最后 yield ("result", 完整结果 dict)。
     LLM 不可用/失败时，result 为规则引擎兜底（一次性给出，不再分段）。"""
     # 计算停滞/索要答案计数器并注入 context（Java 端不传，自行统计）
-    counters = _compute_stuck_counters(history)
+    # 注意：必须把当前用户消息计入，否则连续索要答案的判定会少算一次，
+    # 导致"连续两次索要答案"的兜底条件实际要三次才触发。
+    counters = _compute_stuck_counters(history + [{"role": "user", "content": message}])
     ctx = dict(context)
     ctx.update(counters)
 
@@ -409,7 +407,7 @@ def rule_reply(message: str, history: list, context: dict) -> dict:
         return _subject_fallback(message, history)
 
     # 兜底交付：连续索要答案 ≥2 次 或 累计未推进 ≥3 次 → 直接给答案 + 要求验证
-    counters = _compute_stuck_counters(history)
+    counters = _compute_stuck_counters(history + [{"role": "user", "content": message}])
     if counters["consecutive_answer_requests"] >= 2 or counters["total_stuck_count"] >= 3:
         step_idx = min(current_step, len(path) - 1)
         step = path[step_idx]
@@ -495,8 +493,8 @@ def _subject_fallback(message: str, history: list) -> dict:
 
 def socratic_reply(message: str, history: list, context: dict) -> dict:
     """优先 LLM，失败/无 Key 时降级引导引擎。（非流式版，保留给内部调用）"""
-    # 计算停滞/索要答案计数器并注入 context
-    counters = _compute_stuck_counters(history)
+    # 计算停滞/索要答案计数器并注入 context（含当前消息，避免少算一次）
+    counters = _compute_stuck_counters(history + [{"role": "user", "content": message}])
     ctx = dict(context)
     ctx.update(counters)
 
@@ -508,7 +506,7 @@ def socratic_reply(message: str, history: list, context: dict) -> dict:
 
     content = chat_completion(prompt, history)
     if content:
-        return {"reply": content[:300], "misconception_type": ctx.get("misconception"), "next_step": 0,
+        return {"reply": content, "misconception_type": ctx.get("misconception"), "next_step": 0,
                 "engine": PROVIDER}
     r = rule_reply(message, history, ctx)
     r["engine"] = f"rule-based (LLM 调用失败或 Key 无效，已降级)"
@@ -556,7 +554,7 @@ def summarize_knowledge(history: list, context: dict) -> dict:
 
 
 def summarize_title(history: list, message: str) -> str:
-    """首轮对话结束后，由 AI 用不超过 30 个字概括本对话主题，作为会话标题。
+    """首轮对话结束后，由 AI 用不超过 25 个字概括本对话主题，作为会话标题。
     history: 历史对话（不含当前这条用户消息），message: 当前用户消息。
     LLM 不可用时降级为取用户首条消息截断。"""
     # 拼出已发生的对话文本（历史 + 当前用户消息）

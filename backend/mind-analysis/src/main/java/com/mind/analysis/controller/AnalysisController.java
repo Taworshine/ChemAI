@@ -1,16 +1,15 @@
 package com.mind.analysis.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mind.analysis.entity.StudentProfile;
 import com.mind.analysis.mapper.StudentProfileMapper;
 import com.mind.common.Result;
 import com.mind.system.entity.SysUser;
 import com.mind.system.mapper.UserMapper;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import cn.dev33.satoken.stp.StpUtil;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -103,6 +102,8 @@ public class AnalysisController {
             if (p.getFootprint() != null) {
                 mastery.put(p.getFootprint(), 1.0);
                 Map<String, Object> item = new HashMap<>();
+                item.put("id", p.getId());
+                item.put("subject", p.getSubject());
                 item.put("footprint", p.getFootprint());
                 item.put("comment", p.getComment());
                 item.put("updateTime", p.getUpdateTime());
@@ -122,5 +123,70 @@ public class AnalysisController {
         }
         data.put("footprints", footprints);
         return Result.ok(data);
+    }
+
+    /** 修改某条足迹的学习笔记（仅本人可修改） */
+    @PutMapping("/profile/{id}/comment")
+    public Result<Void> updateComment(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
+        StudentProfile p = profileMapper.selectById(id);
+        if (p == null) {
+            return Result.error("足迹不存在");
+        }
+        if (!Objects.equals(p.getStudentId(), StpUtil.getLoginIdAsLong())) {
+            return Result.error("无权限修改他人足迹");
+        }
+        String comment = body.get("comment");
+        if (comment != null) {
+            comment = comment.trim();
+            if (comment.length() > 1000) {
+                comment = comment.substring(0, 1000);
+            }
+        }
+        profileMapper.update(null, new UpdateWrapper<StudentProfile>().eq("id", id).set("comment", comment));
+        return Result.ok();
+    }
+
+    /** 新增一条足迹（学生自定义） */
+    @PostMapping("/profile")
+    public Result<Map<String, Object>> createProfile(@RequestBody Map<String, String> body) {
+        String subject = body.get("subject");
+        String footprint = body.get("footprint");
+        String comment = body.get("comment");
+        if (footprint == null || footprint.trim().isEmpty()) {
+            return Result.error("知识点名称不能为空");
+        }
+        footprint = footprint.trim();
+        if (footprint.length() > 255) footprint = footprint.substring(0, 255);
+        if (subject != null) {
+            subject = subject.trim();
+            if (subject.length() > 20) subject = subject.substring(0, 20);
+        }
+        if (comment != null) {
+            comment = comment.trim();
+            if (comment.length() > 1000) comment = comment.substring(0, 1000);
+        }
+        StudentProfile p = new StudentProfile();
+        p.setStudentId(StpUtil.getLoginIdAsLong());
+        p.setSubject(subject);
+        p.setFootprint(footprint);
+        p.setComment(comment);
+        profileMapper.insert(p);
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", p.getId());
+        return Result.ok(data);
+    }
+
+    /** 删除某条足迹（仅本人可删除） */
+    @DeleteMapping("/profile/{id}")
+    public Result<Void> deleteProfile(@PathVariable("id") Long id) {
+        StudentProfile p = profileMapper.selectById(id);
+        if (p == null) {
+            return Result.error("足迹不存在");
+        }
+        if (!Objects.equals(p.getStudentId(), StpUtil.getLoginIdAsLong())) {
+            return Result.error("无权限删除他人足迹");
+        }
+        profileMapper.deleteById(id);
+        return Result.ok();
     }
 }

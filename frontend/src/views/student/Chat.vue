@@ -11,6 +11,10 @@
              @click="openSession(s.id)">
           <div class="s-title">{{ s.summary || '自由提问' }}</div>
           <div class="s-sum">{{ fmtTime(s.createTime) }}</div>
+          <div class="s-actions" @click.stop>
+            <span class="s-btn" title="重命名" @click="renameSession(s)">✎</span>
+            <span class="s-btn del" title="删除" @click="deleteSession(s)">🗑</span>
+          </div>
         </div>
         <el-empty v-if="!sessions.length" description="点击右上角开始新对话" :image-size="70" />
       </div>
@@ -63,7 +67,7 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
 
 const sessions = ref([])
@@ -110,6 +114,51 @@ async function openSession(id) {
   const res = await api.get(`/agent/history/${id}`)
   messages.value = res.data
   scrollBottom()
+}
+
+async function renameSession(s) {
+  try {
+    const { value } = await ElMessageBox.prompt('', '重命名对话', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: s.summary || '',
+      inputValidator: v => (v && v.trim()) ? true : '名称不能为空',
+      customClass: 'chat-msgbox chat-prompt-box'
+    })
+    await api.put(`/agent/session/${s.id}/summary`, { summary: value.trim() })
+    ElMessage.success('已重命名')
+    loadSessions()
+  } catch (e) {
+    // 用户取消不提示
+  }
+}
+
+async function deleteSession(s) {
+  try {
+    await ElMessageBox.confirm(
+      '删除后，该对话将不可恢复',
+      '删除对话',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        customClass: 'chat-msgbox chat-delete-box'
+      }
+    )
+    await api.delete(`/agent/session/${s.id}`)
+    ElMessage.success('已删除')
+    // 若删除的是当前会话，清空消息区并打开第一个会话或新建
+    if (s.id === currentSessionId.value) {
+      currentSessionId.value = null
+      messages.value = []
+      await loadSessions()
+      if (sessions.value.length) openSession(sessions.value[0].id)
+    } else {
+      loadSessions()
+    }
+  } catch (e) {
+    // 用户取消不提示
+  }
 }
 
 async function send() {
@@ -174,14 +223,19 @@ onMounted(async () => {
 
 <style scoped>
 .chat { display: flex; gap: 16px; height: calc(100vh - 104px); }
-.side { width: 250px; display: flex; flex-direction: column; padding: 14px; }
+.side { width: 270px; display: flex; flex-direction: column; padding: 14px; }
 .side-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; padding: 4px 6px 12px; }
 .sessions { flex: 1; overflow-y: auto; }
-.session { padding: 10px 12px; border-radius: 10px; cursor: pointer; margin-bottom: 4px; transition: background .18s; }
+.session { padding: 10px 12px; border-radius: 10px; cursor: pointer; margin-bottom: 4px; transition: background .18s; position: relative; }
 .session:hover { background: #f4f7fd; }
 .session.on { background: rgba(74,125,255,.1); }
-.s-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.s-title { font-size: 13.5px; font-weight: 600; color: var(--ink); padding-right: 42px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s-sum { font-size: 12px; color: var(--ink-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-actions { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: none; gap: 4px; }
+.session:hover .s-actions { display: flex; }
+.s-btn { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 13px; color: var(--ink-3); background: rgba(255,255,255,.8); cursor: pointer; transition: all .15s; }
+.s-btn:hover { background: var(--primary); color: #fff; }
+.s-btn.del:hover { background: #f56c6c; }
 
 .main { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .banner {
@@ -220,4 +274,31 @@ onMounted(async () => {
 .thinking { color: var(--ink-3); font-size: 12px; margin-right: 6px; }
 @keyframes blink { 50% { opacity: 0; } }
 .input-bar { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); background: #fbfcfe; }
+</style>
+
+<!-- ElMessageBox 渲染于 body，需用非 scoped 样式 -->
+<style>
+/* 统一弹窗胶囊风格 */
+.chat-msgbox { border-radius: 16px !important; }
+.chat-msgbox .el-message-box__title { font-weight: 600; }
+/* 按钮统一胶囊形状 */
+.chat-msgbox .el-message-box__btns .el-button {
+  border-radius: 999px !important;
+  min-width: 84px;
+}
+/* 重命名弹窗：去掉空消息占位，输入框胶囊化 */
+.chat-prompt-box .el-message-box__message { display: none; }
+.chat-prompt-box .el-message-box__input .el-input__wrapper {
+  border-radius: 999px !important;
+  padding: 4px 16px;
+}
+/* 删除弹窗：确认按钮改为醒目红色 */
+.chat-delete-box .el-message-box__btns .el-button--primary {
+  background: #f56c6c !important;
+  border-color: #f56c6c !important;
+}
+.chat-delete-box .el-message-box__btns .el-button--primary:hover {
+  background: #f78989 !important;
+  border-color: #f78989 !important;
+}
 </style>
