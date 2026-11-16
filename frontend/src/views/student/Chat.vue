@@ -43,7 +43,7 @@
           <div class="row ai" v-else>
             <div class="av ai-av">AI</div>
             <div class="bubble">
-              {{ m.content }}
+              <div class="md-body" v-html="renderMarkdown(m.content)"></div>
               <div class="meta" v-if="m.misconceptionType">
                 <el-tag size="small" type="warning" effect="light">卡点：{{ misText(m.misconceptionType) }}</el-tag>
               </div>
@@ -52,7 +52,7 @@
         </template>
         <div class="row ai" v-if="streaming || thinking">
           <div class="av ai-av">AI</div>
-          <div class="bubble"><span v-if="thinking" class="thinking">正在思考 ···</span>{{ streaming }}<span class="cursor">▍</span></div>
+          <div class="bubble"><span v-if="thinking" class="thinking">正在思考 ···</span><span class="md-body" v-html="renderMarkdown(streaming)"></span><span class="cursor">▍</span></div>
         </div>
       </div>
       <div class="input-bar">
@@ -69,6 +69,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
+import { renderMarkdown } from '../../utils/markdown'
 
 const sessions = ref([])
 const messages = ref([])
@@ -269,6 +270,17 @@ onMounted(async () => {
   border-bottom-right-radius: 4px;
 }
 .row.ai .bubble { border-bottom-left-radius: 4px; }
+.md-body { white-space: normal; }
+.md-body p { margin: 0 0 6px; }
+.md-body p:last-child { margin-bottom: 0; }
+.md-body ul, .md-body ol { margin: 4px 0; padding-left: 22px; }
+.md-body li { margin: 2px 0; }
+.md-body code { background: rgba(74,125,255,.1); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+.md-body pre { background: #f0f2f7; padding: 8px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
+.md-body pre code { background: transparent; padding: 0; }
+.md-body strong { font-weight: 600; }
+.md-body .katex-display { margin: 6px 0; overflow-x: auto; overflow-y: hidden; }
+.md-body .katex { font-size: 1.05em; }
 .meta { margin-top: 6px; }
 .cursor { color: var(--primary); animation: blink 1s infinite; }
 .thinking { color: var(--ink-3); font-size: 12px; margin-right: 6px; }

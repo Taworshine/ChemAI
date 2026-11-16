@@ -34,6 +34,7 @@
                 :description="footprints.length ? '没有选中学科的足迹' : '还没有足迹，去智能追问学懂一个知识点吧'"
                 :image-size="70" />
       <div class="fp-foot">
+        <span class="fp-hint">由 AI 助手根据你的学习对话自动为你整理沉淀</span>
         <el-button type="primary" round @click="showAddDialog = true">+ 新增足迹</el-button>
       </div>
     </div>
@@ -131,8 +132,11 @@ let chart = null
 
 const misText = t => ({ CONCEPT_UNCLEAR: '概念不清', CALC_ERROR: '计算错误', LOGIC_ERROR: '逻辑错误' }[t] || t)
 
-/** 当前足迹中出现过的学科 */
-const footprintSubjects = computed(() => [...new Set(footprints.value.map(f => f.subject || '其他'))])
+/** 当前足迹中出现过的学科，按固定学科顺序排列，无卡片的学科不展示 */
+const footprintSubjects = computed(() => {
+  const present = new Set(footprints.value.map(f => f.subject || '其他'))
+  return subjectOptions.filter(s => present.has(s))
+})
 
 /**
  * 学科多选筛选（Faceted Search）：OR 逻辑。
@@ -297,7 +301,8 @@ onBeforeUnmount(() => chart?.dispose())
 }
 .fp-comment:hover { background: #f4f7fd; }
 .fp-date { font-size: 11.5px; color: var(--ink-3); text-align: right; }
-.fp-foot { display: flex; justify-content: flex-end; margin-top: 14px; }
+.fp-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+.fp-hint { font-size: 12px; color: var(--ink-3, #b1b8c5); }
 
 .d-row { background: #f6fbf8; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
 .d-row.wrong { background: #fdf3f5; }
