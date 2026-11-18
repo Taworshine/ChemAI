@@ -13,6 +13,8 @@ public class EduDocument {
     private Long id;
     private String title;
     private String docType;
+    /** 所属学科（上传时继承教师学科） */
+    private String subject;
     private String filePath;
     /** 0待解析 1解析中 2成功 3失败 */
     private Integer parseStatus;
@@ -43,6 +45,14 @@ public class EduDocument {
 
     public void setDocType(String docType) {
         this.docType = docType;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
     }
 
     public String getFilePath() {

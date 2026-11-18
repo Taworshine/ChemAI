@@ -1,0 +1,58 @@
+{
+  "pages": [
+    { "path": "pages/login/login", "style": { "navigationBarTitleText": "登录" } },
+    { "path": "pages/meeting/list", "style": { "navigationBarTitleText": "教研会议", "enablePullDownRefresh": true } },
+    { "path": "pages/meeting/create", "style": { "navigationBarTitleText": "发起会议" } },
+    { "path": "pages/meeting/join", "style": { "navigationBarTitleText": "加入会议" } },
+    { "path": "pages/meeting/room", "style": { "navigationBarTitleText": "会议现场" } },
+    { "path": "pages/review/analyze", "style": { "navigationBarTitleText": "教案体检" } },
+    { "path": "pages/analysis/analysis", "style": { "navigationBarTitleText": "学情热力图" } },
+    { "path": "pages/plan/list", "style": { "navigationBarTitleText": "教案", "enablePullDownRefresh": true } },
+    { "path": "pages/plan/detail", "style": { "navigationBarTitleText": "教案详情" } },
+    { "path": "pages/plan/upload", "style": { "navigationBarTitleText": "上传教案" } },
+    { "path": "pages/bank/bank", "style": { "navigationBarTitleText": "题库", "enablePullDownRefresh": true } },
+    { "path": "pages/bank/record", "style": { "navigationBarTitleText": "录错题" } },
+    { "path": "pages/mine/mine", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/mine/minutes", "style": { "navigationBarTitleText": "会议纪要" } },
+    { "path": "pages/mine/tasks", "style": { "navigationBarTitleText": "会后任务" } },
+    { "path": "pages/mine/favorites", "style": { "navigationBarTitleText": "我的收藏" } },
+    { "path": "pages/mine/notice", "style": { "navigationBarTitleText": "消息通知" } },
+    { "path": "pages/mine/graph", "style": { "navigationBarTitleText": "班级知识图谱" } }
+  ],
+  "tabBar": {
+    "color": "#86909C",
+    "selectedColor": "#00B578",
+    "list": [
+      {
+        "pagePath": "pages/meeting/list",
+        "text": "会议",
+        "iconPath": "static/tabbar/meeting.png",
+        "selectedIconPath": "static/tabbar/meeting-active.png"
+      },
+      {
+        "pagePath": "pages/plan/list",
+        "text": "教案",
+        "iconPath": "static/tabbar/plan.png",
+        "selectedIconPath": "static/tabbar/plan-active.png"
+      },
+      {
+        "pagePath": "pages/bank/bank",
+        "text": "题库",
+        "iconPath": "static/tabbar/bank.png",
+        "selectedIconPath": "static/tabbar/bank-active.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "static/tabbar/mine.png",
+        "selectedIconPath": "static/tabbar/mine-active.png"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "教研会议",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#F6F7F9"
+  }
+}

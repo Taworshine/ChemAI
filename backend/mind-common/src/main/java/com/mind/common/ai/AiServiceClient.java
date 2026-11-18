@@ -136,30 +136,6 @@ public class AiServiceClient {
         return postForMap("/api/faq/cluster", req);
     }
 
-    /**
-     * 学生进入 E 状态（已理解）后，总结本轮对话生成 footprint（知识点短语）和 comment（学习笔记）。
-     * 返回 {"footprint": "...", "comment": "..."}。
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> summarize(List<Map<String, Object>> history, Map<String, Object> context) {
-        Map<String, Object> req = new HashMap<>();
-        req.put("history", history);
-        req.put("context", context == null ? new HashMap<>() : context);
-        return postForMap("/api/chat/summarize", req);
-    }
-
-    /**
-     * 首轮对话结束后，生成不超过 30 字的会话标题。
-     * 返回 {"title": "..."}。
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> summarizeTitle(List<Map<String, Object>> history, String message) {
-        Map<String, Object> req = new HashMap<>();
-        req.put("history", history);
-        req.put("message", message);
-        return postForMap("/api/chat/title", req);
-    }
-
     public boolean health() {
         try {
             String body = restTemplate.getForObject(baseUrl + "/api/health", String.class);

@@ -5,8 +5,14 @@ const routes = [
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
-    redirect: () => localStorage.getItem('role') === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard',
+    redirect: () => {
+      const role = localStorage.getItem('role')
+      if (role === 'TEACHER') return '/teacher/dashboard'
+      if (role === 'ADMIN') return '/admin/users'
+      return '/student/dashboard'
+    },
     children: [
+      { path: 'admin/users', component: () => import('../views/admin/Users.vue'), meta: { role: 'ADMIN', title: '教师管理' } },
       { path: 'teacher/dashboard', component: () => import('../views/teacher/Dashboard.vue'), meta: { role: 'TEACHER', title: '工作台' } },
       { path: 'teacher/graph', component: () => import('../views/teacher/Graph.vue'), meta: { role: 'TEACHER', title: '知识图谱' } },
       { path: 'teacher/knowledge', component: () => import('../views/teacher/Knowledge.vue'), meta: { role: 'TEACHER', title: '知识管理' } },
@@ -34,7 +40,10 @@ router.beforeEach((to) => {
   const token = localStorage.getItem('satoken')
   if (!token) return '/login'
   if (to.meta.role && localStorage.getItem('role') !== to.meta.role) {
-    return localStorage.getItem('role') === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard'
+    const role = localStorage.getItem('role')
+    if (role === 'TEACHER') return '/teacher/dashboard'
+    if (role === 'ADMIN') return '/admin/users'
+    return '/student/dashboard'
   }
   return true
 })

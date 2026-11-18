@@ -62,6 +62,9 @@
           <el-button type="primary" class="btn" size="large" :loading="loading" @click="doLogin">
             登 录
           </el-button>
+          <div class="to-reg">
+            还没有账号？<el-link type="primary" :underline="false" @click="regDlg = true">立即注册</el-link>
+          </div>
         </el-form>
 
         <div class="accounts">
@@ -80,6 +83,40 @@
         </div>
       </div>
       <p class="foot">思维赋能 Mind Empower · 高中全学科苏格拉底式智能教学辅助系统</p>
+
+      <!-- 注册对话框：学生 / 教师自助注册 -->
+      <el-dialog v-model="regDlg" title="注册账号" width="420px" destroy-on-close>
+        <el-form label-width="80px" size="large">
+          <el-form-item label="用户名">
+            <el-input v-model="reg.username" placeholder="3~50 个字符，注册后不可改" />
+          </el-form-item>
+          <el-form-item label="姓名">
+            <el-input v-model="reg.realName" placeholder="真实姓名" />
+          </el-form-item>
+          <el-form-item label="身份">
+            <el-radio-group v-model="reg.role">
+              <el-radio-button value="STUDENT">学生</el-radio-button>
+              <el-radio-button value="TEACHER">教师</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="reg.role === 'STUDENT'" label="班级">
+            <el-input v-model="reg.className" placeholder="如：高三(2)班" />
+          </el-form-item>
+          <el-form-item v-if="reg.role === 'TEACHER'" label="学科">
+            <el-input v-model="reg.subject" placeholder="如：化学，可留空由管理员分配" />
+          </el-form-item>
+          <el-form-item label="密码">
+            <el-input v-model="reg.password" type="password" show-password placeholder="至少 6 位" />
+          </el-form-item>
+          <el-form-item label="确认密码">
+            <el-input v-model="reg.confirm" type="password" show-password placeholder="再输一遍" @keyup.enter="doRegister" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="regDlg = false">取 消</el-button>
+          <el-button type="primary" :loading="reging" @click="doRegister">注 册</el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -95,6 +132,9 @@ const router = useRouter()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
+const regDlg = ref(false)
+const reging = ref(false)
+const reg = ref({ username: '', realName: '', role: 'STUDENT', className: '', subject: '', password: '', confirm: '' })
 
 const features = [
   { t: '全学科知识图谱', d: '语数英物化生政史地 · Neo4j 实时图谱',
@@ -124,9 +164,35 @@ async function doLogin() {
     localStorage.setItem('realName', res.data.realName)
     localStorage.setItem('userId', res.data.userId)
     ElMessage.success('登录成功，欢迎回来')
-    router.push(res.data.role === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard')
+    const role = res.data.role
+    router.push(role === 'TEACHER' ? '/teacher/dashboard' : role === 'ADMIN' ? '/admin/users' : '/student/dashboard')
   } finally {
     loading.value = false
+  }
+}
+
+async function doRegister() {
+  const r = reg.value
+  if (!r.username || r.username.trim().length < 3) return ElMessage.warning('用户名至少 3 个字符')
+  if (!r.password || r.password.length < 6) return ElMessage.warning('密码至少 6 位')
+  if (r.password !== r.confirm) return ElMessage.warning('两次密码不一致')
+  reging.value = true
+  try {
+    await api.post('/auth/register', {
+      username: r.username.trim(),
+      password: r.password,
+      realName: r.realName,
+      role: r.role,
+      className: r.className,
+      subject: r.subject
+    })
+    ElMessage.success('注册成功，已自动登录')
+    username.value = r.username.trim()
+    password.value = r.password
+    regDlg.value = false
+    setTimeout(doLogin, 400)
+  } finally {
+    reging.value = false
   }
 }
 </script>
@@ -223,6 +289,7 @@ async function doLogin() {
 .btn:active { transform: translateY(0); }
 
 .accounts { margin-top: 8px; }
+.to-reg { text-align: center; font-size: 13px; color: var(--ink-3); margin-top: 14px; }
 .acc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .acc-card {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;

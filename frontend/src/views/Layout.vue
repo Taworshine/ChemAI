@@ -59,7 +59,12 @@
             <el-icon><DataAnalysis /></el-icon><span>学情分析</span>
           </el-menu-item>
         </template>
-        <template v-else>
+        <template v-if="role === 'ADMIN'">
+          <el-menu-item index="/admin/users">
+            <el-icon><User /></el-icon><span>教师管理</span>
+          </el-menu-item>
+        </template>
+        <template v-else-if="role === 'STUDENT'">
           <el-menu-item index="/student/dashboard">
             <el-icon><Monitor /></el-icon><span>个人面板</span>
           </el-menu-item>
@@ -88,7 +93,7 @@
         <div class="avatar">{{ (realName || 'U').charAt(0) }}</div>
         <div class="info">
           <strong>{{ realName }}</strong>
-          <span>{{ role === 'TEACHER' ? '教师端' : '学生端' }}</span>
+          <span>{{ roleLabel }}</span>
         </div>
         <el-tooltip content="退出登录" placement="top">
           <el-icon class="logout" @click="logout"><SwitchButton /></el-icon>
@@ -109,7 +114,7 @@
             <div class="user-chip">
               <span class="uc-avatar">{{ (realName || 'U').charAt(0) }}</span>
               <span class="uc-name">{{ realName }}</span>
-              <span class="uc-role">{{ role === 'TEACHER' ? '教师' : '学生' }}</span>
+              <span class="uc-role">{{ roleLabel.replace('端', '') }}</span>
               <el-icon :size="12" class="uc-caret"><ArrowDown /></el-icon>
             </div>
             <template #dropdown>
@@ -149,6 +154,8 @@ import api from '../api'
 
 const router = useRouter()
 const role = ref(localStorage.getItem('role'))
+const roleLabel = computed(() => role.value === 'TEACHER' ? '教师端' : role.value === 'ADMIN' ? '管理端' : '学生端')
+const homePath = () => role.value === 'TEACHER' ? '/teacher/dashboard' : role.value === 'ADMIN' ? '/admin/users' : '/student/dashboard'
 const realName = ref(localStorage.getItem('realName') || '')
 const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 /** 下拉分组默认展开 */
@@ -174,7 +181,7 @@ async function loadTodos() {
 
 function onCommand(cmd) {
   if (cmd === 'logout') logout()
-  else if (cmd === 'home') router.push(role.value === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard')
+  else if (cmd === 'home') router.push(homePath())
   else if (cmd === 'profile') router.push('/student/profile')
 }
 

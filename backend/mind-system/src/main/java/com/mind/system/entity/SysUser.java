@@ -16,6 +16,8 @@ public class SysUser {
     private String realName;
     private String role;
     private String className;
+    /** 教师所属学科（管理员/学生为空），仅管理员可修改 */
+    private String subject;
     private LocalDateTime createTime;
 
     public Long getId() {
@@ -64,6 +66,14 @@ public class SysUser {
 
     public void setClassName(String className) {
         this.className = className;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
     }
 
     public LocalDateTime getCreateTime() {

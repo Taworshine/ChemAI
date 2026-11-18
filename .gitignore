@@ -33,6 +33,9 @@ Thumbs.db
 *.bak
 *_tmp.bat
 
-# ===== npm缓存 =====
-frontend/.npm-cache-new/
-frontend/.npm-temp-cache/
+# ===== 移动端与后台管理构建产物 =====
+mobile-app/dist/
+admin-console/dist/
+
+# ===== 本地参考克隆 =====
+ChemAI/

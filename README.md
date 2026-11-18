@@ -21,36 +21,28 @@
 
 ## 一、首次启动（已在本机完成）
 
+> **重要变化**：项目文件夹里**不再存放任何 `.sql` / `.cypher` 脚本文件**——数据库（MySQL `mind_empower` 库 +
+> Neo4j 图谱）只存在于数据库实例中，建库建表与种子数据已在库内完成。日常数据维护请使用
+> **独立后台管理系统**（`admin-console`，http://localhost:7200，admin / 123456）。
+
 ```bash
-# 1. MySQL：建库建表 + 种子数据（密码 root/psxngS4，sql 文件夹按数字前缀顺序执行）
-#    懒人做法：直接 cmd /c init-sql.bat，自动按顺序执行下面全部脚本
-
-"D:\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -ppsxngS4 --default-character-set=utf8mb4 < sql\01_schema.sql
-"D:\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -ppsxngS4 --default-character-set=utf8mb4 < sql\02_schema_v2.sql
-"D:\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -ppsxngS4 --default-character-set=utf8mb4 < sql\03_seed_mysql.sql
-"D:\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -ppsxngS4 --default-character-set=utf8mb4 < sql\04_seed_v2_mysql.sql
-
-# 2. Neo4j：约束 + 图谱种子数据（密码 neo4j/ppsxngS4）
-#    import-data.bat 会自动扫描 seeds 文件夹里所有 .cypher 并按文件名顺序导入
-cmd /c import-data.bat
-
-# 3. Python 依赖（已装好，虚拟环境在 ai-service\venv）
+# 1. Python 依赖（已装好，虚拟环境在 ai-service\venv）
 cd ai-service && venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# 4. 后端编译（产物 backend\mind-server\target\mind-server-1.0.0.jar）
+# 2. 后端编译（产物 backend\mind-server\target\mind-server-1.0.0.jar）
 cd ..\backend && mvn -DskipTests clean package
 
-# 5. 前端依赖
+# 3. 前端依赖（Web 端 / 移动端 / 后台管理 三个前端）
 cd ..\frontend && npm install
+cd ..\mobile-app && npm install
+cd ..\admin-console && npm install
 ```
 
 ## 二、日常启动
 
-**方式 A（推荐）**：双击项目根目录的 `start-all.bat`，按 6 步自动完成：检查/启动 Neo4j → 导入 MySQL 数据（init-sql.bat）→ 导入 Neo4j 图谱（import-data.bat）→ 启动 AI 服务 + Java 后端 + 前端，共 4 个窗口。
+**方式 A（推荐）**：双击项目根目录的 `start-all.bat`，自动完成：检查/启动 Neo4j → 启动 AI 服务 + Java 后端 + Web 前端 + 移动端 APP + 后台管理系统，共 6 个窗口。启动过程**不会重置数据库**。
 
-> ⚠️ 启动即重置：`init-sql.bat` 和 `import-data.bat` 都是**幂等重置式导入**——每次启动都会先把 MySQL 和 Neo4j 恢复为种子数据，练习记录、聊天记录等使用数据会被清空。如需保留使用数据，启动后不要再手动运行这两个脚本。
-
-**方式 B（手动，4 个终端）**：
+**方式 B（手动，6 个终端）**：
 
 ```bash
 # 终端 1：Neo4j（如已在运行可跳过）
@@ -66,14 +58,19 @@ cd E:\agent+neo4j\backend
 set "PATH=E:\Java\Java 17\bin;%PATH%"
 java -jar mind-server\target\mind-server-1.0.0.jar
 
-# 终端 4：前端
-cd E:\agent+neo4j\frontend
-npm run dev
+# 终端 4：Web 前端（5173）
+cd E:\agent+neo4j\frontend && npm run dev
+
+# 终端 5：移动端 APP 预览（7100）
+cd E:\agent+neo4j\mobile-app && npm run dev
+
+# 终端 6：后台管理系统（7200）
+cd E:\agent+neo4j\admin-console && npm run dev
 ```
 
-访问 **http://localhost:5173**　｜　Neo4j 浏览器：**http://localhost:7474**
+访问 **Web 教学系统 http://localhost:5173** ｜ **移动端 APP http://localhost:7100** ｜ **后台管理系统 http://localhost:7200** ｜ Neo4j 浏览器：**http://localhost:7474**
 
-演示账号：`teacher / 123456`（教师）、`2023001` ~ `2023010 / 123456`（学生，高三(2)班）
+演示账号：`teacher / 123456`（教师）、`2023001` ~ `2023010 / 123456`（学生，高三(2)班）、`admin / 123456`（后台管理系统）。教师与学生可在登录页**自助注册**。
 
 ## 三、接入大模型（可选：DeepSeek / Kimi）
 
@@ -117,8 +114,10 @@ E:\agent+neo4j\
 │   ├── mind-knowledge              文档上传解析、Neo4j 图谱 CRUD
 │   ├── mind-agent                  对话会话、SSE 流式追问
 │   ├── mind-analysis               学情统计（热力图/雷达）
+│   ├── mind-mobile                 移动端教研会议 API（会议/批注/投票/纪要/任务/组卷，见 docs\05）
 │   └── mind-server                 启动模块 + application.yml
 ├── ai-service\                     FastAPI：文档解析、DeepSeek 调用、追问生成
+├── mobile-app\                     uni-app (Vue3) 教研会议 APP（HBuilderX 打包 APK，见 docs\05）
 └── frontend\                       Vue3：登录/图谱编辑/文档/看板/对话/报告
 ```
 
@@ -150,5 +149,17 @@ MATCH (n) WHERE any(l IN labels(n) WHERE l IN ['Concept','QuestionType','Thinkin
 # 重置 MySQL 数据：重跑 sql\ 文件夹全部脚本（含 00_reset.sql 整库重建）
 cmd /c init-sql.bat
 ```
+
+## 八、数据库直查约定（读数据一律直连，不用额外 .sql/.cypher 文件）
+
+```bash
+# MySQL：直连 mind_empower（utf8mb4），查询从标准输入传入
+echo "SELECT * FROM sys_user;" | cmd /c db.bat mysql
+
+# Neo4j：直连图谱，中文输入输出均已处理 UTF-8（含 BOM 清理与 file.encoding）
+echo "MATCH (c:Concept) WHERE c.subject='化学' RETURN c.name;" | cmd /c db.bat neo4j
+```
+
+`db.bat` 是项目根目录的统一直查入口：读数据现查现用，不落脚本文件；写操作与建库仍走 `sql\`、`seeds\` 里的工程构建脚本。
 
 > 注意：本机 Java 17 在 `E:\Java\Java 17`（未加入系统 PATH），启动脚本已内置该路径。

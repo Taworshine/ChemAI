@@ -31,24 +31,35 @@ public class DocumentController {
     private final DocumentMapper documentMapper;
     private final ExtractionTaskMapper extractionTaskMapper;
     private final AiServiceClient aiClient;
+    private final com.mind.system.service.SubjectContext subjectContext;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String uploadDir;
 
     public DocumentController(DocumentMapper documentMapper,
                               ExtractionTaskMapper extractionTaskMapper,
                               AiServiceClient aiClient,
+                              com.mind.system.service.SubjectContext subjectContext,
                               @Value("${app.upload-dir:./uploads}") String uploadDir) {
         this.documentMapper = documentMapper;
         this.extractionTaskMapper = extractionTaskMapper;
         this.aiClient = aiClient;
+        this.subjectContext = subjectContext;
         this.uploadDir = uploadDir;
     }
 
+    /** 允许上传的教案格式 */
+    private static final List<String> ALLOWED_EXT = List.of(".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg");
+
     @PostMapping("/upload")
     public Result<EduDocument> upload(@RequestParam("file") MultipartFile file,
-                                      @RequestParam("docType") String docType) throws Exception {
+                                      @RequestParam("docType") String docType,
+                                      @RequestParam(value = "title", required = false) String title) throws Exception {
         String original = file.getOriginalFilename() == null ? "unnamed" : file.getOriginalFilename();
-        String ext = original.contains(".") ? original.substring(original.lastIndexOf('.')) : "";
+        String ext = original.contains(".") ? original.substring(original.lastIndexOf('.')).toLowerCase() : "";
+        if (!ALLOWED_EXT.contains(ext)) {
+            return Result.error("不支持的文件格式 " + (ext.isEmpty() ? original : ext)
+                    + "，仅支持 PDF / Word / 图片");
+        }
         String filename = UUID.randomUUID() + ext;
         Path dir = Paths.get(uploadDir).toAbsolutePath().normalize();
         Files.createDirectories(dir);
@@ -56,18 +67,29 @@ public class DocumentController {
         file.transferTo(target.toFile());
 
         EduDocument doc = new EduDocument();
-        doc.setTitle(original);
+        // 标题优先用前端填写的；否则取文件名（去掉扩展名）
+        if (title != null && !title.trim().isEmpty()) {
+            doc.setTitle(title.trim());
+        } else {
+            doc.setTitle(original.substring(0, original.length() - ext.length()));
+        }
         doc.setDocType(docType);
         doc.setFilePath(target.toString());
         doc.setParseStatus(0);
         doc.setUploadUserId(StpUtil.getLoginIdAsLong());
+        // 学科自动继承上传教师的所属学科
+        doc.setSubject(subjectContext.currentSubject());
         documentMapper.insert(doc);
         return Result.ok(doc);
     }
 
     @GetMapping("/list")
     public Result<List<EduDocument>> list() {
-        return Result.ok(documentMapper.selectList(new QueryWrapper<EduDocument>().orderByDesc("id")));
+        QueryWrapper<EduDocument> qw = new QueryWrapper<EduDocument>().orderByDesc("id");
+        // 教师仅见本学科文档；管理员/学生不做限制
+        String scope = subjectContext.currentSubject();
+        if (scope != null) qw.eq("subject", scope);
+        return Result.ok(documentMapper.selectList(qw));
     }
 
     /**

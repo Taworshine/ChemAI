@@ -6,28 +6,16 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
-/**
- * 学情画像表：记录学生在对话中掌握的知识点足迹与 AI 生成的学习笔记。
- * 表结构见 sql/07_student_profile.sql。
- */
 @TableName("student_profile")
 public class StudentProfile {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-
-    /** 学生用户 ID（sys_user.id） */
     private Long studentId;
-
-    /** 学科：语文/数学/英语/物理/化学/生物/历史/地理/其他 */
-    private String subject;
-
-    /** 简短概括的知识点，如：金属单质与强酸反应 */
-    private String footprint;
-
-    /** AI 生成的学习笔记，如：铁、锌等活泼金属与盐酸、稀硫酸反应生成盐和氢气 */
-    private String comment;
-
+    /** JSON 字符串：{"氧化还原":0.85,...} */
+    private String conceptMastery;
+    /** JSON 字符串：{"概念理解":80,...} */
+    private String thinkingRadar;
     private LocalDateTime updateTime;
 
     public Long getId() {
@@ -46,28 +34,20 @@ public class StudentProfile {
         this.studentId = studentId;
     }
 
-    public String getSubject() {
-        return subject;
+    public String getConceptMastery() {
+        return conceptMastery;
     }
 
-    public void setSubject(String subject) {
-        this.subject = subject;
+    public void setConceptMastery(String conceptMastery) {
+        this.conceptMastery = conceptMastery;
     }
 
-    public String getFootprint() {
-        return footprint;
+    public String getThinkingRadar() {
+        return thinkingRadar;
     }
 
-    public void setFootprint(String footprint) {
-        this.footprint = footprint;
-    }
-
-    public String getComment() {
-        return comment;
-    }
-
-    public void setComment(String comment) {
-        this.comment = comment;
+    public void setThinkingRadar(String thinkingRadar) {
+        this.thinkingRadar = thinkingRadar;
     }
 
     public LocalDateTime getUpdateTime() {

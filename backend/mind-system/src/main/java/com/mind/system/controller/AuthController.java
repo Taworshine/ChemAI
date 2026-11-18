@@ -54,6 +54,7 @@ public class AuthController {
         data.put("role", user.getRole());
         data.put("realName", user.getRealName());
         data.put("userId", user.getId());
+        data.put("subject", user.getSubject());
         return Result.ok(data);
     }
 
@@ -67,6 +68,7 @@ public class AuthController {
         data.put("realName", user.getRealName());
         data.put("role", user.getRole());
         data.put("className", user.getClassName());
+        data.put("subject", user.getSubject());
         return Result.ok(data);
     }
 
@@ -74,5 +76,49 @@ public class AuthController {
     public Result<Void> logout() {
         StpUtil.logout();
         return Result.ok();
+    }
+
+    /**
+     * 自助注册：学生或教师自己创建账号（后台管理员由种子数据预置，不走这里）。
+     * 用户名全局唯一；密码 SHA-256 存储；教师可填所属学科。
+     */
+    @PostMapping("/register")
+    public Result<Map<String, Object>> register(@RequestBody Map<String, String> body) {
+        String username = body.get("username");
+        String password = body.get("password");
+        String realName = body.get("realName");
+        String role = body.get("role") == null ? "STUDENT" : body.get("role").toUpperCase();
+        String className = body.get("className");
+        String subject = body.get("subject");
+
+        if (username == null || username.trim().length() < 3 || username.trim().length() > 50) {
+            return Result.error("用户名需为 3~50 个字符");
+        }
+        if (password == null || password.length() < 6) {
+            return Result.error("密码至少 6 位");
+        }
+        if (!"STUDENT".equals(role) && !"TEACHER".equals(role)) {
+            return Result.error("注册身份只支持学生或教师");
+        }
+        Long exists = userMapper.selectCount(new QueryWrapper<SysUser>().eq("username", username.trim()));
+        if (exists != null && exists > 0) {
+            return Result.error("该用户名已被注册");
+        }
+
+        SysUser user = new SysUser();
+        user.setUsername(username.trim());
+        user.setPassword(sha256(password));
+        user.setRealName(realName == null || realName.isEmpty() ? username.trim() : realName.trim());
+        user.setRole(role);
+        user.setClassName(className == null || className.isEmpty() ? null : className.trim());
+        // 学生无学科；教师的学科默认空，可在后台管理系统中由管理员分配
+        user.setSubject("TEACHER".equals(role) && subject != null && !subject.isEmpty() ? subject.trim() : null);
+        userMapper.insert(user);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("userId", user.getId());
+        data.put("username", user.getUsername());
+        data.put("role", user.getRole());
+        return Result.ok(data);
     }
 }

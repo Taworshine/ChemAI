@@ -16,6 +16,7 @@
         <module>mind-knowledge</module>
         <module>mind-agent</module>
         <module>mind-analysis</module>
+        <module>mind-mobile</module>
         <module>mind-server</module>
     </modules>
 
@@ -78,6 +79,11 @@
             <dependency>
                 <groupId>com.mind</groupId>
                 <artifactId>mind-analysis</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mind</groupId>
+                <artifactId>mind-mobile</artifactId>
                 <version>1.0.0</version>
             </dependency>
         </dependencies>

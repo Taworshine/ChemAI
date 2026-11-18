@@ -15,10 +15,6 @@
             <artifactId>mind-common</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.mind</groupId>
-            <artifactId>mind-analysis</artifactId>
-        </dependency>
-        <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
