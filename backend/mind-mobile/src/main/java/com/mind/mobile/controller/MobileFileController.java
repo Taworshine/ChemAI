@@ -89,7 +89,7 @@ public class MobileFileController {
     public Result<Map<String, Object>> meta(@PathVariable("id") Long id) {
         EduDocument doc = documentMapper.selectById(id);
         if (doc == null) {
-            return Result.error("文档不存在");
+            return Result.error(400, "文档不存在");
         }
         Map<String, Object> data = new HashMap<>();
         data.put("id", doc.getId());

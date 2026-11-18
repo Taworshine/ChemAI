@@ -83,7 +83,7 @@ public class VoteController {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> choices = (List<Map<String, Object>>) body.get("choices");
         if (choices == null || choices.isEmpty()) {
-            return Result.error("请至少选择一个选项");
+            return Result.error(400, "请至少选择一个选项");
         }
         if ("SINGLE".equals(vote.getVoteType())) {
             // 单选：先清掉该用户在此投票中的旧记录，保证一人一票
@@ -112,7 +112,7 @@ public class VoteController {
     public Result<Map<String, Object>> result(@PathVariable("id") Long id) throws Exception {
         MobileVote vote = voteMapper.selectById(id);
         if (vote == null) {
-            return Result.error("投票不存在");
+            return Result.error(400, "投票不存在");
         }
         autoCloseIfExpired(vote);
         List<MobileVoteRecord> records = recordMapper.selectList(
@@ -159,13 +159,13 @@ public class VoteController {
     public Result<Void> close(@PathVariable("id") Long id) {
         MobileVote vote = voteMapper.selectById(id);
         if (vote == null) {
-            return Result.error("投票不存在");
+            return Result.error(400, "投票不存在");
         }
         Long userId = StpUtil.getLoginIdAsLong();
         com.mind.mobile.entity.MobileMeeting meeting = meetingMapper.selectById(vote.getMeetingId());
         boolean isHost = meeting != null && meeting.getHostId().equals(userId);
         if (!vote.getCreatorId().equals(userId) && !isHost) {
-            return Result.error("仅创建者或主持人可结束投票");
+            return Result.error(403, "仅创建者或主持人可结束投票");
         }
         voteMapper.update(null, new UpdateWrapper<MobileVote>().eq("id", id).set("status", 1));
         return Result.ok();

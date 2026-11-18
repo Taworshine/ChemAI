@@ -48,10 +48,10 @@ public class SummaryController {
         Long meetingId = body.get("meetingId");
         MobileMeeting meeting = meetingMapper.selectById(meetingId);
         if (meeting == null) {
-            return Result.error("会议不存在");
+            return Result.error(400, "会议不存在");
         }
         if (!meeting.getHostId().equals(StpUtil.getLoginIdAsLong())) {
-            return Result.error("仅主持人可生成纪要");
+            return Result.error(403, "仅主持人可生成纪要");
         }
 
         ObjectNode content = objectMapper.createObjectNode();
@@ -130,11 +130,11 @@ public class SummaryController {
         MobileSummary summary = summaryMapper.selectOne(
                 new QueryWrapper<MobileSummary>().eq("meeting_id", meetingId));
         if (summary == null) {
-            return Result.error("纪要不存在，请先生成");
+            return Result.error(400, "纪要不存在，请先生成");
         }
         MobileMeeting meeting = meetingMapper.selectById(meetingId);
         if (!meeting.getHostId().equals(StpUtil.getLoginIdAsLong())) {
-            return Result.error("仅主持人可确认纪要");
+            return Result.error(403, "仅主持人可确认纪要");
         }
         if (body.get("content") != null) {
             summary.setContent(String.valueOf(body.get("content")));

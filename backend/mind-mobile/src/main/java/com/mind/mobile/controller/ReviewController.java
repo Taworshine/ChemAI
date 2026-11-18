@@ -37,10 +37,10 @@ public class ReviewController {
     public Result<Map<String, Object>> analyze(@PathVariable("docId") Long docId) throws Exception {
         EduDocument doc = documentMapper.selectById(docId);
         if (doc == null) {
-            return Result.error("文档不存在");
+            return Result.error(400, "文档不存在");
         }
         if (doc.getParseResult() == null) {
-            return Result.error("文档尚未解析，请先调用 /api/document/parse/" + docId);
+            return Result.error(400, "文档尚未解析，请先调用 /api/document/parse/" + docId);
         }
         JsonNode extract = objectMapper.readTree(doc.getParseResult());
 

@@ -96,7 +96,7 @@ public class AnnotationController {
     @PostMapping("/voice")
     public Result<Map<String, Object>> voice(@RequestParam("file") MultipartFile file) throws Exception {
         if (file.getSize() > 10 * 1024 * 1024) {
-            return Result.error("语音文件过大（限 10MB）");
+            return Result.error(400, "语音文件过大（限 10MB）");
         }
         String original = file.getOriginalFilename() == null ? "voice" : file.getOriginalFilename();
         String ext = original.contains(".") ? original.substring(original.lastIndexOf('.')) : ".m4a";
@@ -115,7 +115,7 @@ public class AnnotationController {
     public Result<MobileAnnotation> reply(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
         MobileAnnotation origin = annotationMapper.selectById(id);
         if (origin == null) {
-            return Result.error("批注不存在");
+            return Result.error(400, "批注不存在");
         }
         Long userId = StpUtil.getLoginIdAsLong();
         checkMeetingMember(origin.getMeetingId(), userId);
@@ -139,7 +139,7 @@ public class AnnotationController {
     public Result<Void> resolve(@PathVariable("id") Long id, @RequestBody(required = false) Map<String, Integer> body) {
         MobileAnnotation a = annotationMapper.selectById(id);
         if (a == null) {
-            return Result.error("批注不存在");
+            return Result.error(400, "批注不存在");
         }
         Long userId = StpUtil.getLoginIdAsLong();
         com.mind.mobile.entity.MobileMeeting meeting = meetingMapper.selectById(a.getMeetingId());
@@ -161,7 +161,7 @@ public class AnnotationController {
             return Result.ok();
         }
         if (!a.getUserId().equals(StpUtil.getLoginIdAsLong())) {
-            return Result.error("只能删除自己的批注");
+            return Result.error(403, "只能删除自己的批注");
         }
         annotationMapper.deleteById(id);
         return Result.ok();

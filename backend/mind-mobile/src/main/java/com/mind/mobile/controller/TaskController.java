@@ -62,11 +62,11 @@ public class TaskController {
                 : Long.valueOf(String.valueOf(body.get("meetingId")));
         Long assigneeId = Long.valueOf(String.valueOf(body.get("assigneeId")));
         if (meetingId == null) {
-            return Result.error("任务必须归属会议");
+            return Result.error(400, "任务必须归属会议");
         }
         com.mind.mobile.entity.MobileMeeting meeting = meetingMapper.selectById(meetingId);
         if (meeting == null) {
-            return Result.error("会议不存在");
+            return Result.error(400, "会议不存在");
         }
         if (!meeting.getHostId().equals(StpUtil.getLoginIdAsLong())) {
             return Result.error(403, "仅主持人可指派任务");
@@ -74,7 +74,7 @@ public class TaskController {
         Long memberCount = memberMapper.selectCount(new QueryWrapper<com.mind.mobile.entity.MobileMeetingMember>()
                 .eq("meeting_id", meetingId).eq("user_id", assigneeId));
         if (memberCount == null || memberCount == 0) {
-            return Result.error("负责人必须是参会成员");
+            return Result.error(400, "负责人必须是参会成员");
         }
         MobileTask task = new MobileTask();
         task.setMeetingId(meetingId);
@@ -95,10 +95,10 @@ public class TaskController {
     public Result<Void> complete(@PathVariable("id") Long id) {
         MobileTask task = taskMapper.selectById(id);
         if (task == null) {
-            return Result.error("任务不存在");
+            return Result.error(400, "任务不存在");
         }
         if (!task.getAssigneeId().equals(StpUtil.getLoginIdAsLong())) {
-            return Result.error("仅负责人可完成任务");
+            return Result.error(403, "仅负责人可完成任务");
         }
         taskMapper.update(null, new UpdateWrapper<MobileTask>().eq("id", id).set("status", 2));
         return Result.ok();

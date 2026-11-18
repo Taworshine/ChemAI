@@ -90,13 +90,13 @@ public class MeetingController {
         MobileMeeting meeting = meetingMapper.selectOne(
                 new QueryWrapper<MobileMeeting>().eq("meeting_no", meetingNo));
         if (meeting == null) {
-            return Result.error("会议号不存在");
+            return Result.error(400, "会议号不存在");
         }
         if (meeting.getLocked() != null && meeting.getLocked() == 1) {
-            return Result.error("会议已锁定，无法加入");
+            return Result.error(403, "会议已锁定，无法加入");
         }
         if (meeting.getStatus() == 2 || meeting.getStatus() == 3) {
-            return Result.error("会议已结束");
+            return Result.error(400, "会议已结束");
         }
         MobileMeetingMember exist = memberMapper.selectOne(new QueryWrapper<MobileMeetingMember>()
                 .eq("meeting_id", meeting.getId()).eq("user_id", userId));
@@ -146,7 +146,7 @@ public class MeetingController {
     public Result<Map<String, Object>> status(@PathVariable("id") Long id) {
         MobileMeeting meeting = meetingMapper.selectById(id);
         if (meeting == null) {
-            return Result.error("会议不存在");
+            return Result.error(400, "会议不存在");
         }
         Map<String, Object> data = new HashMap<>();
         data.put("meeting", meeting);
@@ -175,7 +175,7 @@ public class MeetingController {
             case "unlock" -> meeting.setLocked(0);
             case "switchDoc" -> meeting.setCurrentDocId(
                     body.get("docId") == null ? null : Long.valueOf(String.valueOf(body.get("docId"))));
-            default -> { return Result.error("不支持的操作：" + action); }
+            default -> { return Result.error(400, "不支持的操作：" + action); }
         }
         meetingMapper.updateById(meeting);
         return Result.ok();
@@ -187,10 +187,10 @@ public class MeetingController {
         MobileMeeting meeting = checkHost(id);
         Long userId = body.get("userId");
         if (userId == null) {
-            return Result.error("缺少 userId");
+            return Result.error(400, "缺少 userId");
         }
         if (meeting.getHostId().equals(userId)) {
-            return Result.error("不能移出主持人自己");
+            return Result.error(403, "不能移出主持人自己");
         }
         memberMapper.delete(new QueryWrapper<MobileMeetingMember>()
                 .eq("meeting_id", id).eq("user_id", userId));
