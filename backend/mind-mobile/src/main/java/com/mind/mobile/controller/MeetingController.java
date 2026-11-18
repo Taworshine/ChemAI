@@ -35,17 +35,20 @@ public class MeetingController {
         this.userMapper = userMapper;
     }
 
-    /** 创建会议：生成不重复的 6 位数字会议号 */
+    /** 创建会议：生成不重复的 6 位数字会议号。仅教师可发起教研会议 */
     @PostMapping("/create")
     public Result<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
         Long userId = StpUtil.getLoginIdAsLong();
+        SysUser creator = userMapper.selectById(userId);
+        if (creator == null || !"TEACHER".equals(creator.getRole())) {
+            return Result.error(403, "仅教师可发起教研会议");
+        }
         MobileMeeting meeting = new MobileMeeting();
         meeting.setTitle(String.valueOf(body.get("title")));
         Object subject = body.get("subject");
         // 未传学科时自动继承主持人所属学科
         if (subject == null || String.valueOf(subject).isEmpty() || "null".equals(String.valueOf(subject))) {
-            SysUser host = userMapper.selectById(userId);
-            meeting.setSubject(host == null ? null : host.getSubject());
+            meeting.setSubject(creator.getSubject());
         } else {
             meeting.setSubject(String.valueOf(subject));
         }
@@ -61,7 +64,10 @@ public class MeetingController {
         List<Integer> memberIds = body.get("memberIds") == null
                 ? new ArrayList<>() : (List<Integer>) body.get("memberIds");
         for (Integer mid : memberIds) {
-            if (!mid.equals(userId.intValue())) {
+            // 只能邀请教师参会（教研会是教师活动），且不能重复添加主持人
+            if (mid.equals(userId.intValue())) continue;
+            SysUser invitee = userMapper.selectById(mid.longValue());
+            if (invitee != null && "TEACHER".equals(invitee.getRole())) {
                 addMember(meeting.getId(), mid.longValue(), "MEMBER");
             }
         }
@@ -72,10 +78,14 @@ public class MeetingController {
         return Result.ok(data);
     }
 
-    /** 输 6 位会议号加入 */
+    /** 输 6 位会议号加入。仅教师可参加教研会议 */
     @PostMapping("/join")
     public Result<Map<String, Object>> join(@RequestBody Map<String, String> body) {
         Long userId = StpUtil.getLoginIdAsLong();
+        SysUser joiner = userMapper.selectById(userId);
+        if (joiner == null || !"TEACHER".equals(joiner.getRole())) {
+            return Result.error(403, "仅教师可参加教研会议");
+        }
         String meetingNo = body.get("meetingNo");
         MobileMeeting meeting = meetingMapper.selectOne(
                 new QueryWrapper<MobileMeeting>().eq("meeting_no", meetingNo));
@@ -116,9 +126,9 @@ public class MeetingController {
         QueryWrapper<MobileMeeting> qw = new QueryWrapper<MobileMeeting>().in("id", meetingIds)
                 .orderByDesc("id");
         if ("host".equals(tab)) {
-            qw.eq("host_id", userId).ne("status", 2);
+            qw.eq("host_id", userId).in("status", 0, 1);
         } else if ("member".equals(tab)) {
-            qw.ne("host_id", userId).ne("status", 2);
+            qw.ne("host_id", userId).in("status", 0, 1);
         } else {
             qw.eq("status", 2);
         }
@@ -171,13 +181,16 @@ public class MeetingController {
         return Result.ok();
     }
 
-    /** 主持人：移出成员 */
+    /** 主持人：移出成员（不能移出主持人自己，避免会议无主） */
     @PostMapping("/{id}/kick")
     public Result<Void> kick(@PathVariable("id") Long id, @RequestBody Map<String, Long> body) {
-        checkHost(id);
+        MobileMeeting meeting = checkHost(id);
         Long userId = body.get("userId");
         if (userId == null) {
             return Result.error("缺少 userId");
+        }
+        if (meeting.getHostId().equals(userId)) {
+            return Result.error("不能移出主持人自己");
         }
         memberMapper.delete(new QueryWrapper<MobileMeetingMember>()
                 .eq("meeting_id", id).eq("user_id", userId));

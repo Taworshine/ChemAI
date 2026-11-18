@@ -21,17 +21,25 @@ public class ChatController {
 
     private final MobileChatMessageMapper chatMapper;
     private final UserMapper userMapper;
+    private final com.mind.mobile.mapper.MobileMeetingMemberMapper memberMapper;
 
-    public ChatController(MobileChatMessageMapper chatMapper, UserMapper userMapper) {
+    public ChatController(MobileChatMessageMapper chatMapper,
+                          UserMapper userMapper,
+                          com.mind.mobile.mapper.MobileMeetingMemberMapper memberMapper) {
         this.chatMapper = chatMapper;
         this.userMapper = userMapper;
+        this.memberMapper = memberMapper;
     }
 
+    /** 发消息：仅参会成员可在会议中发言 */
     @PostMapping("/send")
     public Result<MobileChatMessage> send(@RequestBody Map<String, Object> body) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Long meetingId = Long.valueOf(String.valueOf(body.get("meetingId")));
+        checkMeetingMember(meetingId, userId);
         MobileChatMessage msg = new MobileChatMessage();
-        msg.setMeetingId(Long.valueOf(String.valueOf(body.get("meetingId"))));
-        msg.setUserId(StpUtil.getLoginIdAsLong());
+        msg.setMeetingId(meetingId);
+        msg.setUserId(userId);
         msg.setContent(String.valueOf(body.get("content")));
         msg.setMsgType(String.valueOf(body.getOrDefault("msgType", "TEXT")));
         msg.setReplyTo(body.get("replyTo") == null ? null : Long.valueOf(String.valueOf(body.get("replyTo"))));
@@ -39,9 +47,11 @@ public class ChatController {
         return Result.ok(msg);
     }
 
+    /** 消息列表（afterId 增量轮询）：仅参会成员可读 */
     @GetMapping("/list")
     public Result<List<Map<String, Object>>> list(@RequestParam Long meetingId,
                                                   @RequestParam(required = false) Long afterId) {
+        checkMeetingMember(meetingId, StpUtil.getLoginIdAsLong());
         QueryWrapper<MobileChatMessage> qw = new QueryWrapper<MobileChatMessage>()
                 .eq("meeting_id", meetingId).orderByAsc("id");
         if (afterId != null) {
@@ -55,5 +65,16 @@ public class ChatController {
             return item;
         }).collect(Collectors.toList());
         return Result.ok(list);
+    }
+
+    // ---------- 私有方法 ----------
+
+    /** 校验用户是会议成员（所有会议内操作的前提） */
+    private void checkMeetingMember(Long meetingId, Long userId) {
+        Long count = memberMapper.selectCount(new QueryWrapper<com.mind.mobile.entity.MobileMeetingMember>()
+                .eq("meeting_id", meetingId).eq("user_id", userId));
+        if (count == null || count == 0) {
+            throw new SecurityException("仅会议成员可执行此操作");
+        }
     }
 }

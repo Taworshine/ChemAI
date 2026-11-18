@@ -26,18 +26,28 @@ public class VoteController {
 
     private final MobileVoteMapper voteMapper;
     private final MobileVoteRecordMapper recordMapper;
+    private final com.mind.mobile.mapper.MobileMeetingMapper meetingMapper;
+    private final com.mind.mobile.mapper.MobileMeetingMemberMapper memberMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public VoteController(MobileVoteMapper voteMapper, MobileVoteRecordMapper recordMapper) {
+    public VoteController(MobileVoteMapper voteMapper,
+                          MobileVoteRecordMapper recordMapper,
+                          com.mind.mobile.mapper.MobileMeetingMapper meetingMapper,
+                          com.mind.mobile.mapper.MobileMeetingMemberMapper memberMapper) {
         this.voteMapper = voteMapper;
         this.recordMapper = recordMapper;
+        this.meetingMapper = meetingMapper;
+        this.memberMapper = memberMapper;
     }
 
-    /** 创建投票：options = [{text:"..."}]，后台自动补 id */
+    /** 创建投票：options = [{text:"..."}]，后台自动补 id。仅参会教师可发起 */
     @PostMapping("/create")
     public Result<MobileVote> create(@RequestBody Map<String, Object> body) throws Exception {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Long meetingId = Long.valueOf(String.valueOf(body.get("meetingId")));
+        checkMeetingMember(meetingId, userId);
         MobileVote vote = new MobileVote();
-        vote.setMeetingId(Long.valueOf(String.valueOf(body.get("meetingId"))));
+        vote.setMeetingId(meetingId);
         vote.setCreatorId(StpUtil.getLoginIdAsLong());
         vote.setTitle(String.valueOf(body.get("title")));
         vote.setVoteType(String.valueOf(body.getOrDefault("voteType", "SINGLE")));
@@ -63,14 +73,23 @@ public class VoteController {
         return Result.ok(vote);
     }
 
-    /** 提交投票：choices = [{optionId, score}] */
+    /** 提交投票：choices = [{optionId, score}]。仅参会成员可投；单选投票重复提交时覆盖旧选择 */
     @PostMapping("/submit")
     public Result<Void> submit(@RequestBody Map<String, Object> body) {
         Long userId = StpUtil.getLoginIdAsLong();
         Long voteId = Long.valueOf(String.valueOf(body.get("voteId")));
         MobileVote vote = checkOpen(voteId);
+        checkMeetingMember(vote.getMeetingId(), userId);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> choices = (List<Map<String, Object>>) body.get("choices");
+        if (choices == null || choices.isEmpty()) {
+            return Result.error("请至少选择一个选项");
+        }
+        if ("SINGLE".equals(vote.getVoteType())) {
+            // 单选：先清掉该用户在此投票中的旧记录，保证一人一票
+            recordMapper.delete(new QueryWrapper<MobileVoteRecord>()
+                    .eq("vote_id", voteId).eq("user_id", userId));
+        }
         for (Map<String, Object> c : choices) {
             MobileVoteRecord record = new MobileVoteRecord();
             record.setVoteId(voteId);
@@ -135,21 +154,33 @@ public class VoteController {
         return Result.ok(votes);
     }
 
-    /** 提前结束投票（创建者） */
+    /** 提前结束投票（创建者或会议主持人） */
     @PostMapping("/{id}/close")
     public Result<Void> close(@PathVariable("id") Long id) {
         MobileVote vote = voteMapper.selectById(id);
         if (vote == null) {
             return Result.error("投票不存在");
         }
-        if (!vote.getCreatorId().equals(StpUtil.getLoginIdAsLong())) {
-            return Result.error("仅创建者可结束投票");
+        Long userId = StpUtil.getLoginIdAsLong();
+        com.mind.mobile.entity.MobileMeeting meeting = meetingMapper.selectById(vote.getMeetingId());
+        boolean isHost = meeting != null && meeting.getHostId().equals(userId);
+        if (!vote.getCreatorId().equals(userId) && !isHost) {
+            return Result.error("仅创建者或主持人可结束投票");
         }
         voteMapper.update(null, new UpdateWrapper<MobileVote>().eq("id", id).set("status", 1));
         return Result.ok();
     }
 
     // ---------- 私有方法 ----------
+
+    /** 校验用户是会议成员（所有会议内操作的前提） */
+    private void checkMeetingMember(Long meetingId, Long userId) {
+        Long count = memberMapper.selectCount(new QueryWrapper<com.mind.mobile.entity.MobileMeetingMember>()
+                .eq("meeting_id", meetingId).eq("user_id", userId));
+        if (count == null || count == 0) {
+            throw new SecurityException("仅会议成员可执行此操作");
+        }
+    }
 
     private MobileVote checkOpen(Long voteId) {
         MobileVote vote = voteMapper.selectById(voteId);

@@ -22,17 +22,25 @@ public class TaskController {
 
     private final MobileTaskMapper taskMapper;
     private final UserMapper userMapper;
+    private final com.mind.mobile.mapper.MobileMeetingMapper meetingMapper;
+    private final com.mind.mobile.mapper.MobileMeetingMemberMapper memberMapper;
 
-    public TaskController(MobileTaskMapper taskMapper, UserMapper userMapper) {
+    public TaskController(MobileTaskMapper taskMapper,
+                          UserMapper userMapper,
+                          com.mind.mobile.mapper.MobileMeetingMapper meetingMapper,
+                          com.mind.mobile.mapper.MobileMeetingMemberMapper memberMapper) {
         this.taskMapper = taskMapper;
         this.userMapper = userMapper;
+        this.meetingMapper = meetingMapper;
+        this.memberMapper = memberMapper;
     }
 
-    /** 我的任务（默认）；主持人传 meetingId 看会议全部任务 */
+    /** 我的任务（默认）；传 meetingId 看会议全部任务（仅会议成员可见） */
     @GetMapping("/list")
     public Result<List<Map<String, Object>>> list(@RequestParam(required = false) Long meetingId) {
         QueryWrapper<MobileTask> qw = new QueryWrapper<MobileTask>().orderByDesc("id");
         if (meetingId != null) {
+            checkMeetingMember(meetingId, StpUtil.getLoginIdAsLong());
             qw.eq("meeting_id", meetingId);
         } else {
             qw.eq("assignee_id", StpUtil.getLoginIdAsLong());
@@ -47,12 +55,29 @@ public class TaskController {
         return Result.ok(list);
     }
 
-    /** 创建任务（通常由主持人在会议中手动添加） */
+    /** 创建任务：仅会议主持人可指派，负责人必须是参会成员 */
     @PostMapping("/create")
     public Result<MobileTask> create(@RequestBody Map<String, Object> body) {
+        Long meetingId = body.get("meetingId") == null ? null
+                : Long.valueOf(String.valueOf(body.get("meetingId")));
+        Long assigneeId = Long.valueOf(String.valueOf(body.get("assigneeId")));
+        if (meetingId == null) {
+            return Result.error("任务必须归属会议");
+        }
+        com.mind.mobile.entity.MobileMeeting meeting = meetingMapper.selectById(meetingId);
+        if (meeting == null) {
+            return Result.error("会议不存在");
+        }
+        if (!meeting.getHostId().equals(StpUtil.getLoginIdAsLong())) {
+            return Result.error(403, "仅主持人可指派任务");
+        }
+        Long memberCount = memberMapper.selectCount(new QueryWrapper<com.mind.mobile.entity.MobileMeetingMember>()
+                .eq("meeting_id", meetingId).eq("user_id", assigneeId));
+        if (memberCount == null || memberCount == 0) {
+            return Result.error("负责人必须是参会成员");
+        }
         MobileTask task = new MobileTask();
-        task.setMeetingId(body.get("meetingId") == null ? null
-                : Long.valueOf(String.valueOf(body.get("meetingId"))));
+        task.setMeetingId(meetingId);
         task.setTitle(String.valueOf(body.get("title")));
         task.setAssigneeId(Long.valueOf(String.valueOf(body.get("assigneeId"))));
         String deadline = body.get("deadline") == null ? null : String.valueOf(body.get("deadline"));
@@ -60,6 +85,7 @@ public class TaskController {
             task.setDeadline(java.time.LocalDateTime.parse(deadline.replace(' ', 'T').substring(0, 19)));
         }
         task.setStatus(0);
+        task.setAssigneeId(assigneeId);
         taskMapper.insert(task);
         return Result.ok(task);
     }
@@ -76,5 +102,16 @@ public class TaskController {
         }
         taskMapper.update(null, new UpdateWrapper<MobileTask>().eq("id", id).set("status", 2));
         return Result.ok();
+    }
+
+    // ---------- 私有方法 ----------
+
+    /** 校验用户是会议成员（所有会议内操作的前提） */
+    private void checkMeetingMember(Long meetingId, Long userId) {
+        Long count = memberMapper.selectCount(new QueryWrapper<com.mind.mobile.entity.MobileMeetingMember>()
+                .eq("meeting_id", meetingId).eq("user_id", userId));
+        if (count == null || count == 0) {
+            throw new SecurityException("仅会议成员可执行此操作");
+        }
     }
 }

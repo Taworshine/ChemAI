@@ -22,6 +22,20 @@ public class GlobalExceptionHandler {
         return Result.error(401, "登录已失效，请重新登录");
     }
 
+    /** 权限类异常统一返回 403（业务校验抛出的 SecurityException），避免误报 500 */
+    @ExceptionHandler(SecurityException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<Void> forbidden(SecurityException e) {
+        return Result.error(403, e.getMessage() == null ? "无权执行此操作" : e.getMessage());
+    }
+
+    /** 参数类异常统一返回 400 */
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> badRequest(RuntimeException e) {
+        return Result.error(400, e.getMessage() == null ? "请求不合法" : e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public Result<Void> error(Exception e) {
         return Result.error(500, e.getMessage() == null ? "服务器内部错误" : e.getMessage());
